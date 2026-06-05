@@ -1,0 +1,8 @@
+{
+  "pythonVersion": "3.13",
+  "pythonPlatform": "All",
+  "typeCheckingMode": "strict",
+  "include": ["src/neopool_modbus"],
+  "exclude": ["tests", "**/node_modules", "**/__pycache__", ".venv", "build", "dist"],
+  "reportMissingTypeStubs": "warning"
+}
