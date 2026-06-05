@@ -12,8 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Async Python client for Sugar Valley NeoPool Modbus pool controllers."""
+"""Async Python client for Sugar Valley NeoPool Modbus pool controllers.
+
+The top-level package exposes only the high-level :class:`NeoPoolModbusClient`
+and the public exception hierarchy.  Lower-level helpers are intentionally
+kept in submodules to keep the public surface small:
+
+- :mod:`neopool_modbus.registers`   - register addresses, bit masks, timer block layouts
+- :mod:`neopool_modbus.decoders`    - register-value parsers and timer helpers
+- :mod:`neopool_modbus.status_mask` - status register bit decoders
+- :mod:`neopool_modbus.exceptions`  - exception hierarchy
+"""
+
+from __future__ import annotations
+
+from .client import NeoPoolModbusClient
+from .exceptions import (
+    NeoPoolConnectionError,
+    NeoPoolError,
+    NeoPoolTimeoutError,
+)
 
 __version__ = "0.1.0"
 
-__all__ = ["__version__"]
+__all__ = [
+    "NeoPoolConnectionError",
+    "NeoPoolError",
+    "NeoPoolModbusClient",
+    "NeoPoolTimeoutError",
+    "__version__",
+]
