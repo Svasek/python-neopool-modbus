@@ -342,7 +342,9 @@ class NeoPoolModbusClient:
         # Perform a lightweight health check
         try:
             result = await asyncio.wait_for(
-                self._client.read_holding_registers(address=0x0000, count=1, device_id=self._unit),
+                self._client.read_holding_registers(
+                    address=0x0000, count=1, device_id=self._unit
+                ),
                 timeout=3,
             )
 
@@ -903,7 +905,9 @@ class NeoPoolModbusClient:
 
             if notification:
                 try:
-                    await client.write_registers(address=0x0110, values=[0], device_id=self._unit)
+                    await client.write_registers(
+                        address=0x0110, values=[0], device_id=self._unit
+                    )
                     _LOGGER.debug(
                         "MBF_NOTIFICATION register cleared (was 0x%04X)", notification
                     )
@@ -1020,7 +1024,9 @@ class NeoPoolModbusClient:
             if not isinstance(value, list):
                 value = [value]
 
-            result = await client.write_registers(address=address, values=value, device_id=self._unit)
+            result = await client.write_registers(
+                address=address, values=value, device_id=self._unit
+            )
             if result.isError():
                 self._failed_writes[f"0x{address:04X}"] = (
                     self._failed_writes.get(f"0x{address:04X}", 0) + 1
@@ -1032,7 +1038,9 @@ class NeoPoolModbusClient:
             # Confirm the write
             await asyncio.sleep(0.05)
             # Read back the register to confirm the write
-            confirm = await client.read_holding_registers(address=address, count=len(value), device_id=self._unit)
+            confirm = await client.read_holding_registers(
+                address=address, count=len(value), device_id=self._unit
+            )
             if confirm.isError():
                 _LOGGER.error("Read failed at 0x%04X: %s", address, confirm)
                 return None
@@ -1057,7 +1065,9 @@ class NeoPoolModbusClient:
             # If apply is True, save the configuration to EEPROM and execute
             if apply:
                 await asyncio.sleep(0.1)
-                result = await client.write_registers(address=EEPROM_SAVE_REGISTER, values=[1], device_id=self._unit)
+                result = await client.write_registers(
+                    address=EEPROM_SAVE_REGISTER, values=[1], device_id=self._unit
+                )
 
                 if result.isError():  # pragma: no cover
                     _LOGGER.error(
@@ -1067,7 +1077,9 @@ class NeoPoolModbusClient:
                 _LOGGER.debug("EEPROM save triggered (0x%04X)", EEPROM_SAVE_REGISTER)
 
                 await asyncio.sleep(0.1)
-                result = await client.write_registers(address=EXEC_REGISTER, values=[1], device_id=self._unit)
+                result = await client.write_registers(
+                    address=EXEC_REGISTER, values=[1], device_id=self._unit
+                )
                 if result.isError():  # pragma: no cover
                     _LOGGER.error("EXEC failed (0x%04X): %s", EXEC_REGISTER, result)
                     return None
@@ -1119,7 +1131,9 @@ class NeoPoolModbusClient:
                     f"Modbus client connection failed to {self._host}:{self._port}"
                 )
             # Read current relay state
-            current_result = await client.read_input_registers(address=addr, count=1, device_id=self._unit)
+            current_result = await client.read_input_registers(
+                address=addr, count=1, device_id=self._unit
+            )
             if current_result.isError():
                 raise ModbusException(
                     f"Modbus read error from 0x{addr:04X}: {current_result}"
@@ -1131,10 +1145,16 @@ class NeoPoolModbusClient:
             else:
                 value = current & ~aux_bit
             await client.write_registers(address=addr, values=[1], device_id=self._unit)
-            await client.write_registers(address=addr, values=[value], device_id=self._unit)
+            await client.write_registers(
+                address=addr, values=[value], device_id=self._unit
+            )
             _LOGGER.debug("Wrote relay state at 0x%04X: 0x%04X", addr, value)
-            await client.write_registers(address=0x0289, values=[0], device_id=self._unit)
-            await client.write_registers(address=EXEC_REGISTER, values=[1], device_id=self._unit)
+            await client.write_registers(
+                address=0x0289, values=[0], device_id=self._unit
+            )
+            await client.write_registers(
+                address=EXEC_REGISTER, values=[1], device_id=self._unit
+            )
             self._successful_write_ops += 1
             self._successful_writes.append((f"0x{addr:04X}", time.time()))
 
@@ -1212,7 +1232,9 @@ class NeoPoolModbusClient:
                 timers[name] = self._cached_timers[name]
                 continue
             try:
-                rr = await client.read_holding_registers(address=addr, count=15, device_id=self._unit)
+                rr = await client.read_holding_registers(
+                    address=addr, count=15, device_id=self._unit
+                )
             except Exception as e:
                 self._failed_reads[f"0x{addr:04X}"] = (
                     self._failed_reads.get(f"0x{addr:04X}", 0) + 1
@@ -1271,7 +1293,9 @@ class NeoPoolModbusClient:
                     "Modbus client connection failed to %s:%s", self._host, self._port
                 )
                 return False
-            rr = await client.read_holding_registers(address=addr, count=15, device_id=self._unit)
+            rr = await client.read_holding_registers(
+                address=addr, count=15, device_id=self._unit
+            )
             if rr.isError():
                 self._failed_writes[f"0x{addr:04X}"] = (
                     self._failed_writes.get(f"0x{addr:04X}", 0) + 1
@@ -1303,7 +1327,9 @@ class NeoPoolModbusClient:
                     "Modbus client connection failed to %s:%s", self._host, self._port
                 )
                 return False
-            result = await client.write_registers(address=addr, values=regs, device_id=self._unit)
+            result = await client.write_registers(
+                address=addr, values=regs, device_id=self._unit
+            )
             if result.isError():
                 self._failed_writes[f"0x{addr:04X}"] = (
                     self._failed_writes.get(f"0x{addr:04X}", 0) + 1
@@ -1314,9 +1340,13 @@ class NeoPoolModbusClient:
             _LOGGER.debug("Wrote timer block %s (0x%04X): %s", block_name, addr, regs)
             await asyncio.sleep(0.1)
             # Write to EEPROM and execute
-            await client.write_registers(address=EEPROM_SAVE_REGISTER, values=[1], device_id=self._unit)
+            await client.write_registers(
+                address=EEPROM_SAVE_REGISTER, values=[1], device_id=self._unit
+            )
             await asyncio.sleep(0.1)
-            await client.write_registers(address=EXEC_REGISTER, values=[1], device_id=self._unit)
+            await client.write_registers(
+                address=EXEC_REGISTER, values=[1], device_id=self._unit
+            )
             await asyncio.sleep(0.1)
 
             self._successful_write_ops += 1
