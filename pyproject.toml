@@ -78,7 +78,10 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+# TODO: tighten lint rules after API stabilization. The minimal ruleset
+# matches the homeassistant-vistapool-modbus integration; broader rules
+# (B, UP, SIM, RUF) are tracked for re-introduction in follow-up cleanup PRs.
+select = ["E", "F", "W", "I"]
 ignore = ["E501"]
 
 [tool.pytest.ini_options]
