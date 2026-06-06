@@ -1,0 +1,45 @@
+name: CodeSpell
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "*.md"
+      - "*.yaml"
+      - "*.yml"
+      - "pyproject.toml"
+      - ".github/workflows/codespell.yaml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "*.md"
+      - "*.yaml"
+      - "*.yml"
+      - "pyproject.toml"
+      - ".github/workflows/codespell.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  codespell:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install CodeSpell
+        run: pip install --upgrade codespell
+
+      - name: Run CodeSpell
+        run: codespell --toml pyproject.toml
