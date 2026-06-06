@@ -123,7 +123,7 @@ def test_get_filtration_speed_cumulative_encoding(relay_state, expected):
     """Controllers using cumulative (thermometer) speed bits (#152)."""
     d = {
         "MBF_RELAY_STATE": relay_state,
-        "MBF_PAR_FILTRATION_CONF": 0x0020,  # conf says high – must be ignored
+        "MBF_PAR_FILTRATION_CONF": 0x0020,  # conf says high - must be ignored
         "Filtration Pump": True,
     }
     assert get_filtration_speed(d) == expected
@@ -356,7 +356,7 @@ def test_is_hydrolysis_in_percent_missing_visual_style():
 
 def test_is_hydrolysis_in_percent_none_values():
     """Test is_hydrolysis_in_percent when Modbus populates keys with None (get_safe IndexError)."""
-    # Both keys present but explicitly None — must not raise TypeError
+    # Both keys present but explicitly None - must not raise TypeError
     data = {
         "MBF_PAR_UICFG_MACH_VISUAL_STYLE": None,
         "MBF_PAR_UICFG_MACHINE": None,

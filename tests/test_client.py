@@ -382,8 +382,8 @@ async def test_perform_read_all_happy_path(config, monkeypatch):
             DummyResp(list(range(14, 18))),  # factory block 2 (0x0322, 4)
             DummyResp(list(range(1, 32))),  # installer block 1 (0x0408, 31)
             DummyResp(
-                [32, 33, 3] + list(range(35, 45))
-            ),  # installer block 2 (0x0427, 13) — UV_RELAY_GPIO=3
+                [32, 33, 3, *list(range(35, 45))]
+            ),  # installer block 2 (0x0427, 13) - UV_RELAY_GPIO=3
             DummyResp([0] * 8),  # installer block 3 (0x04E8, 8) FILTVALVE
             DummyResp([650, 0, 750, 700, 0, 0, 700, 0, 100, 0, 0, 0, 5000, 0]),  # rr05
             DummyResp([9, 6, 25604, 5, 0, 2240, 545, 1281, 0, 0, 0, 0, 0]),  # rr06
@@ -694,7 +694,7 @@ async def test_perform_read_all_timers_all_enabled(config, monkeypatch):
     from neopool_modbus.registers import TIMER_BLOCKS
 
     assert set(result.keys()) == set(TIMER_BLOCKS.keys())
-    for timer, data in result.items():
+    for _timer, data in result.items():
         assert isinstance(data, dict)
         assert "enable" in data
         assert "on" in data
@@ -966,10 +966,9 @@ async def test_perform_write_register_logs_exception(config, monkeypatch, caplog
     monkeypatch.setattr(
         client, "get_client", AsyncMock(side_effect=Exception("simulated error"))
     )
-    with caplog.at_level("ERROR"):
-        with pytest.raises(ModbusException):
-            await client._perform_write_register(0x0100, 123)
-            assert "simulated error" in caplog.text
+    with caplog.at_level("ERROR"), pytest.raises(ModbusException):
+        await client._perform_write_register(0x0100, 123)
+        assert "simulated error" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -1122,7 +1121,7 @@ async def test_async_write_aux_relay_on_and_off(config, monkeypatch):
 
     # Verify read and write calls for ON
     # read_input_registers should be called for 0x010E (relay state)
-    args, kwargs = fake_modbus.read_input_registers.await_args
+    _args, kwargs = fake_modbus.read_input_registers.await_args
     assert kwargs["address"] == 0x010E
     assert kwargs["count"] == 1
 
@@ -1278,17 +1277,30 @@ def test_install_fc20_filter_rtu_split_fc20_second_chunk_not_dropped():
 
     The first call contains a partial FC20 and is filtered; the second call starts
     with the remaining FC20 bytes which do not match the FC20 pattern (data[1] != 0x20),
-    so the entire second chunk — including any trailing valid response — is forwarded.
+    so the entire second chunk - including any trailing valid response - is forwarded.
     """
     client, mock_ctx, mock_client, received = _client_with_ctx(RTU_CONFIG)
     client._install_fc20_filter(mock_client)
 
-    # FC20 frame (byte_count=0 → 9 bytes total), split after the 5th byte.
+    # FC20 frame (byte_count=0 -> 9 bytes total), split after the 5th byte.
     fc20_first = bytes([0x01, 0x20, 0x02, 0x01, 0x00])  # partial: matched & dropped
     # Remaining 4 FC20 bytes followed by a valid FC03 response in the same chunk.
     fc20_tail_plus_response = bytes(
-        [0x01, 0x00, 0xAA, 0xBB]  # FC20 tail (CRC region), data[1]=0x00 ≠ 0x20
-        + [0x01, 0x03, 0x02, 0x00, 0x64, 0xB9, 0xAF]  # valid FC03 response
+        [
+            # FC20 tail (CRC region), data[1]=0x00 != 0x20:
+            0x01,
+            0x00,
+            0xAA,
+            0xBB,
+            # Valid FC03 response that follows immediately:
+            0x01,
+            0x03,
+            0x02,
+            0x00,
+            0x64,
+            0xB9,
+            0xAF,
+        ]
     )
 
     mock_ctx.data_received(fc20_first)
@@ -1296,7 +1308,7 @@ def test_install_fc20_filter_rtu_split_fc20_second_chunk_not_dropped():
 
     mock_ctx.data_received(fc20_tail_plus_response)
     assert received == [fc20_tail_plus_response], (
-        "Second chunk (FC20 tail + valid response) must be forwarded — valid data must not be lost"
+        "Second chunk (FC20 tail + valid response) must be forwarded - valid data must not be lost"
     )
 
 
@@ -1396,9 +1408,9 @@ def test_install_fc20_filter_socket_drops_coalesced_chunk_entirely():
 
 
 def test_install_fc20_filter_socket_buffers_short_ambiguous_prefix_then_drops():
-    """SOCKET: 2–3 byte chunk starting with [unit_id, 0x20] is buffered; once the
+    """SOCKET: 2-3 byte chunk starting with [unit_id, 0x20] is buffered; once the
     next chunk provides the Protocol ID bytes and they confirm a raw FC20 broadcast
-    (≠ 0x0000), the combined data is dropped.
+    (!= 0x0000), the combined data is dropped.
     """
     client, mock_ctx, mock_client, received = _client_with_ctx(TCP_CONFIG)
     client._install_fc20_filter(mock_client)
@@ -1413,7 +1425,7 @@ def test_install_fc20_filter_socket_buffers_short_ambiguous_prefix_then_drops():
 
 
 def test_install_fc20_filter_socket_buffers_short_ambiguous_prefix_then_passes():
-    """SOCKET: 2–3 byte chunk starting with [unit_id, 0x20] is buffered; once the
+    """SOCKET: 2-3 byte chunk starting with [unit_id, 0x20] is buffered; once the
     next chunk provides the Protocol ID bytes and they confirm a valid Modbus TCP
     frame (PID = 0x0000), the combined data is forwarded unchanged.
     """
@@ -1442,7 +1454,7 @@ def test_install_fc20_filter_socket_buffers_3_byte_prefix_then_drops():
     assert received == [], "3-byte prefix must be buffered"
 
     mock_ctx.data_received(bytes([0x01, 0x5A, 0xBB]))  # byte3=0x01 → PID=0x0201 → FC20
-    assert received == [], "FC20 recognised after 4th byte is received — drop"
+    assert received == [], "FC20 recognised after 4th byte is received - drop"
 
 
 # ---- Safety / edge cases ----
@@ -1546,7 +1558,7 @@ async def test_perform_read_all_reads_only_factory_when_factory_notified(
             _measure_regs(notification=neopool_modbus._NOTIF_FACTORY)
         )
     )
-    # FACTORY: 2 calls — (0x0300, 13) and (0x0322, 4)
+    # FACTORY: 2 calls - (0x0300, 13) and (0x0322, 4)
     fake_modbus.read_holding_registers = AsyncMock(
         side_effect=[
             _DummyResp([0] * 13),  # rr03-1
@@ -1893,7 +1905,7 @@ async def test_perform_read_all_timers_force_read_bypasses_cache(config, monkeyp
     """force_read timers are re-read from Modbus even when the cache would be used."""
     client = neopool_modbus.NeoPoolModbusClient(config)
     client._last_was_full_read = False
-    client._last_notification = 0  # no notification — cache would normally be used
+    client._last_notification = 0  # no notification - cache would normally be used
     client._cached_timers = {
         "filtration1": {
             "enable": 1,
@@ -1984,7 +1996,7 @@ async def test_filtration_fixup_skipped_on_partial_read(config, monkeypatch):
     Scenario (issue #122): On a partial read (no INSTALLER notification), the
     INSTALLER page is not re-read. The cached MBF_PAR_FILTRATION_STATE may be
     stale (0=off) while the fresh MBF_RELAY_STATE correctly shows the pump ON.
-    The fixup must NOT fire in this case — the relay bit should be trusted.
+    The fixup must NOT fire in this case - the relay bit should be trusted.
     """
     client = neopool_modbus.NeoPoolModbusClient(config)
 
@@ -1998,8 +2010,8 @@ async def test_filtration_fixup_skipped_on_partial_read(config, monkeypatch):
 
     # --- First poll: full read, pump off everywhere ---
     reg01_off = [0] * 18
-    reg01_off[14] = 0x0000  # MBF_RELAY_STATE — pump off
-    reg01_off[16] = 0  # MBF_NOTIFICATION — no changes
+    reg01_off[14] = 0x0000  # MBF_RELAY_STATE - pump off
+    reg01_off[16] = 0  # MBF_NOTIFICATION - no changes
 
     installer_block1 = [0] * 31
     installer_block1[10] = 2  # MBF_PAR_FILT_GPIO = 2
@@ -2029,8 +2041,8 @@ async def test_filtration_fixup_skipped_on_partial_read(config, monkeypatch):
     client._polls_since_full_read = 1  # just after full read
 
     reg01_on = [0] * 18
-    reg01_on[14] = 0x0002  # MBF_RELAY_STATE — bit 1 set (pump ON)
-    reg01_on[16] = 0  # MBF_NOTIFICATION — no INSTALLER change
+    reg01_on[14] = 0x0002  # MBF_RELAY_STATE - bit 1 set (pump ON)
+    reg01_on[16] = 0  # MBF_NOTIFICATION - no INSTALLER change
 
     fake_modbus.read_input_registers = AsyncMock(return_value=DummyResp(reg01_on))
     # No holding register reads expected (partial read, no notification)
@@ -2084,7 +2096,7 @@ async def test_filtration_state_fixup_v8_07_firmware(config, monkeypatch):
             DummyResp([0] * 4),  # factory block 2 (0x0322)
             DummyResp(
                 installer_block1
-            ),  # installer block 1 (0x0408, 31) — has MBF_PAR_FILTRATION_STATE
+            ),  # installer block 1 (0x0408, 31) - has MBF_PAR_FILTRATION_STATE
             DummyResp([0] * 13),  # installer block 2 (0x0427)
             DummyResp([0] * 8),  # installer block 3 (0x04E8, FILTVALVE)
             DummyResp([0] * 14),  # rr05
@@ -2120,11 +2132,11 @@ async def test_filtration_state_fixup_pump_off_agrees(config, monkeypatch):
     fake_modbus.connected = True
 
     reg01 = [0] * 18
-    reg01[14] = 0x0000  # MBF_RELAY_STATE — bit 1 not set (pump off)
+    reg01[14] = 0x0000  # MBF_RELAY_STATE - bit 1 not set (pump off)
 
     installer_block1 = [0] * 31
     installer_block1[10] = 2  # MBF_PAR_FILT_GPIO = 2 (relay 2, bit 1)
-    installer_block1[25] = 0  # MBF_PAR_FILTRATION_STATE = 0 (pump off — agrees)
+    installer_block1[25] = 0  # MBF_PAR_FILTRATION_STATE = 0 (pump off - agrees)
 
     fake_modbus.read_holding_registers = AsyncMock(
         side_effect=[
@@ -2168,7 +2180,7 @@ async def test_filtration_state_fixup_relay_on_but_state_off(config, monkeypatch
     fake_modbus.connected = True
 
     reg01 = [0] * 18
-    reg01[14] = 0x0002  # MBF_RELAY_STATE — bit 1 set (relay claims pump on)
+    reg01[14] = 0x0002  # MBF_RELAY_STATE - bit 1 set (relay claims pump on)
 
     installer_block1 = [0] * 31
     installer_block1[10] = 2  # MBF_PAR_FILT_GPIO = 2 (relay 2, bit 1)
@@ -2259,7 +2271,7 @@ async def test_hydrolysis_detected_via_status_ctrl_active(config, monkeypatch):
     reg01[13] = 0x0040  # MBF_HIDRO_STATUS bit 6 (CTRL_ACTIVE)
 
     factory_block1 = [0] * 13
-    factory_block1[1] = 0x0000  # MBF_PAR_MODEL — no HIDRO bit
+    factory_block1[1] = 0x0000  # MBF_PAR_MODEL - no HIDRO bit
 
     fake_modbus.read_holding_registers = AsyncMock(
         side_effect=[
