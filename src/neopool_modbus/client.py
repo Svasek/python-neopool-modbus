@@ -525,6 +525,9 @@ class NeoPoolModbusClient:
         try:
             client = await self.get_client()
             if client is None or not client.connected:  # pragma: no cover
+                self._failed_reads["connection"] = (
+                    self._failed_reads.get("connection", 0) + 1
+                )
                 raise NeoPoolConnectionError(
                     f"Modbus client connection failed to {self._host}:{self._port}"
                 )
