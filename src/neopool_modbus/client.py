@@ -1307,13 +1307,18 @@ class NeoPoolModbusClient:
         Only update 'on' and 'interval' (and optionally other editable fields).
         Other values (enable, period, function, ...) are preserved as read.
         """
+        # `addr` is captured up front for the failed_writes counter inside the
+        # try block; if `block_name` is unknown we raise before bumping any
+        # diagnostics state. `start` and `_total_writes` move into the try so
+        # they share the existing finally-block accounting (response time
+        # always recorded, errors always escalated through the same except).
         addr = TIMER_BLOCKS[block_name]
         start = time.monotonic()
-        self._total_writes += 1
-
-        # 1. Read current timer block from Modbus
-        client = await self.get_client()
         try:
+            self._total_writes += 1
+
+            # 1. Read current timer block from Modbus
+            client = await self.get_client()
             if client is None or not client.connected:
                 self._failed_writes[f"0x{addr:04X}"] = (
                     self._failed_writes.get(f"0x{addr:04X}", 0) + 1

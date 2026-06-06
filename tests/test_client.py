@@ -1187,6 +1187,23 @@ async def test_perform_write_timer_exec_isError(config, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_perform_write_timer_unknown_block_name_raises_keyerror(config):
+    """An unknown block_name raises KeyError before any Modbus traffic so the
+    caller sees a programmer error rather than a silent skip. The diagnostics
+    counters remain untouched (the `try` block has not started yet)."""
+    client = neopool_modbus.NeoPoolModbusClient(config)
+    initial_total = client._total_writes
+
+    with pytest.raises(KeyError):
+        await client._perform_write_timer("nonexistent_timer", {"on": 10})
+
+    # `addr = TIMER_BLOCKS[block_name]` runs before the diagnostics counter
+    # bump, so an invalid name does not pollute the write totals.
+    assert client._total_writes == initial_total
+    assert client._failed_writes == {}
+
+
+@pytest.mark.asyncio
 async def test_async_write_aux_relay_on_and_off(config, monkeypatch):
     """Test async_write_aux_relay turns AUX relay ON and OFF successfully."""
 
