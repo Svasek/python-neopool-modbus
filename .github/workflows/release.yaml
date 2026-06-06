@@ -36,8 +36,8 @@ jobs:
       name: pypi
       url: https://pypi.org/project/neopool-modbus/${{ needs.release-please.outputs.version }}
     permissions:
-      contents: read
-      id-token: write
+      contents: write  # gh release upload writes assets onto the release
+      id-token: write  # PyPI Trusted Publisher OIDC
     steps:
       - name: Checkout the released tag
         uses: actions/checkout@v6
