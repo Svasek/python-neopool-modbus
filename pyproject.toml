@@ -84,6 +84,10 @@ line-ending = "auto"
 select = ["E", "F", "W", "I"]
 ignore = ["E501"]
 
+[tool.codespell]
+skip = "*.json,CHANGELOG.md"
+check-filenames = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
