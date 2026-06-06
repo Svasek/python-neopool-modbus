@@ -1,20 +1,10 @@
 name: Release
 
-# NOTE: Automatic triggers are temporarily disabled until the PyPI Trusted
-# Publisher (see https://docs.pypi.org/trusted-publishers/) is configured for
-# this project. Until then this workflow is invocable only via the GitHub UI
-# (workflow_dispatch). Once the publisher is set up, restore:
-#
-#   push:
-#     branches:
-#       - main
-#
-# under `on:` below.
 on:
   workflow_dispatch:
-  # push:
-  #   branches:
-  #     - main
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
