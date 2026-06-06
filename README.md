@@ -70,6 +70,7 @@ from neopool_modbus import (
     NeoPoolModbusClient,
     NeoPoolError,
     NeoPoolConnectionError,
+    NeoPoolModbusError,
     NeoPoolTimeoutError,
 )
 from neopool_modbus.registers import (
@@ -100,10 +101,30 @@ from neopool_modbus.status_mask import (
 )
 ```
 
-The exception hierarchy (`NeoPoolError` → `NeoPoolConnectionError` /
-`NeoPoolTimeoutError`) is a forward-compatible contract; today the client
-still raises the underlying `pymodbus` exceptions directly. Catching
-`Exception` is the only safe choice for now.
+All client methods translate underlying pymodbus exceptions into the
+`NeoPoolError` hierarchy at the library boundary, so callers never need
+to import `pymodbus` to catch errors:
+
+| Class                    | Raised when                                                                      |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `NeoPoolConnectionError` | TCP connect fails, returned `False`, or the client is in its post-failure backoff |
+| `NeoPoolTimeoutError`    | Connect, read, or write times out (`asyncio.TimeoutError`)                       |
+| `NeoPoolModbusError`     | The device returns a Modbus exception response (`isError()` true)                 |
+| `NeoPoolError`           | Common base; catch this to handle any of the above                                |
+
+```python
+from neopool_modbus import NeoPoolError, NeoPoolModbusClient
+
+client = NeoPoolModbusClient({"host": "192.168.1.42"})
+try:
+    data = await client.async_read_all()
+except NeoPoolError as exc:
+    # exc.__cause__ is the original pymodbus / asyncio exception, if any.
+    print(f"NeoPool read failed: {exc}")
+```
+
+`ValueError` is still raised directly for programmer errors such as an
+out-of-range AUX relay index — those are not transport failures.
 
 ## Features
 
