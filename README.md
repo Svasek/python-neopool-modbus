@@ -72,6 +72,7 @@ from neopool_modbus import (
     NeoPoolConnectionError,
     NeoPoolModbusError,
     NeoPoolTimeoutError,
+    async_probe_serial,
 )
 from neopool_modbus.registers import (
     EXEC_REGISTER,
