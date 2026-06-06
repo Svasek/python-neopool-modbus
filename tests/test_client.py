@@ -1188,6 +1188,56 @@ async def test_async_write_aux_relay_write_exception(config, monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failing_call", "expected_msg_fragment"),
+    [
+        (1, "relay enable"),  # 1st write: address=addr, values=[1]
+        (2, "relay value"),  # 2nd write: address=addr, values=[value]
+        (3, "0x0289 (commit trigger)"),  # 3rd write: address=0x0289
+        (4, "EXEC"),  # 4th write: address=EXEC_REGISTER
+    ],
+)
+async def test_async_write_aux_relay_write_iserror(
+    config, monkeypatch, failing_call, expected_msg_fragment
+):
+    """Each of the four AUX relay writes must escalate isError() into a ModbusException.
+
+    Sugar Valley devices can return a Modbus exception response from write_registers
+    while pymodbus surfaces it as a successful Python call (no raise). The client
+    must therefore inspect ``result.isError()`` after every write so that a silent
+    exception response cannot be counted as a successful relay update.
+    """
+    client = neopool_modbus.NeoPoolModbusClient(config)
+    fake_modbus = AsyncMock()
+    fake_modbus.connected = True
+
+    class DummyResp:
+        def __init__(self, regs=None, is_error=False):
+            self.registers = regs or []
+            self.isError = lambda: is_error
+
+    # Read succeeds with a known relay state
+    fake_modbus.read_input_registers = AsyncMock(return_value=DummyResp([0]))
+
+    # The first `failing_call - 1` writes succeed, the `failing_call`-th returns isError.
+    call_counter = {"n": 0}
+
+    async def write_registers_side_effect(*args, **kwargs):
+        call_counter["n"] += 1
+        return DummyResp(is_error=(call_counter["n"] == failing_call))
+
+    fake_modbus.write_registers = AsyncMock(side_effect=write_registers_side_effect)
+    monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
+
+    with pytest.raises(ModbusException) as excinfo:
+        await client.async_write_aux_relay(1, True)
+
+    assert expected_msg_fragment in str(excinfo.value)
+    # Subsequent writes must NOT happen after a failed step
+    assert call_counter["n"] == failing_call
+
+
+@pytest.mark.asyncio
 async def test_get_client_respects_backoff(config):
     c = neopool_modbus.NeoPoolModbusClient(config)
     c._backoff_until = datetime.now() + timedelta(seconds=5)

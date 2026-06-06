@@ -1141,17 +1141,35 @@ class NeoPoolModbusClient:
             current = current_result.registers[0]
             # Set or clear the aux bit
             value = current | aux_bit if on else current & ~aux_bit
-            await client.write_registers(address=addr, values=[1], device_id=self._unit)
-            await client.write_registers(
+            result = await client.write_registers(
+                address=addr, values=[1], device_id=self._unit
+            )
+            if result.isError():
+                raise ModbusException(
+                    f"Modbus write error at 0x{addr:04X} (relay enable): {result}"
+                )
+            result = await client.write_registers(
                 address=addr, values=[value], device_id=self._unit
             )
+            if result.isError():
+                raise ModbusException(
+                    f"Modbus write error at 0x{addr:04X} (relay value): {result}"
+                )
             _LOGGER.debug("Wrote relay state at 0x%04X: 0x%04X", addr, value)
-            await client.write_registers(
+            result = await client.write_registers(
                 address=0x0289, values=[0], device_id=self._unit
             )
-            await client.write_registers(
+            if result.isError():
+                raise ModbusException(
+                    f"Modbus write error at 0x0289 (commit trigger): {result}"
+                )
+            result = await client.write_registers(
                 address=EXEC_REGISTER, values=[1], device_id=self._unit
             )
+            if result.isError():
+                raise ModbusException(
+                    f"Modbus write error at 0x{EXEC_REGISTER:04X} (EXEC): {result}"
+                )
             self._successful_write_ops += 1
             self._successful_writes.append((f"0x{addr:04X}", time.time()))
 
