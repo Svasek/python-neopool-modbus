@@ -15,9 +15,9 @@
 """Public exception hierarchy for ``neopool_modbus``.
 
 These classes form a stable contract for callers of the library.  Internal
-code currently raises :mod:`pymodbus` exceptions directly; future versions
-may translate them into the classes defined here without breaking callers
-that already catch :exc:`NeoPoolError`.
+pymodbus exceptions raised by the underlying TCP / Modbus layer are caught
+at the library boundary and re-raised as one of these classes, so callers
+never need to catch :mod:`pymodbus`-specific types.
 """
 
 from __future__ import annotations
@@ -35,8 +35,19 @@ class NeoPoolTimeoutError(NeoPoolError):
     """Raised when a Modbus read or write operation times out."""
 
 
+class NeoPoolModbusError(NeoPoolError):
+    """Raised when the device returns a Modbus exception response.
+
+    This covers the case where the TCP transport works but the Modbus
+    payload itself indicates a protocol-level failure (``isError()`` is
+    true on the response, or the device replied with an unexpected
+    payload such as ``ExceptionResponse``).
+    """
+
+
 __all__ = [
     "NeoPoolConnectionError",
     "NeoPoolError",
+    "NeoPoolModbusError",
     "NeoPoolTimeoutError",
 ]
