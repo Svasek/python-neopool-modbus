@@ -1140,10 +1140,7 @@ class NeoPoolModbusClient:
                 )
             current = current_result.registers[0]
             # Set or clear the aux bit
-            if on:
-                value = current | aux_bit
-            else:
-                value = current & ~aux_bit
+            value = current | aux_bit if on else current & ~aux_bit
             await client.write_registers(address=addr, values=[1], device_id=self._unit)
             await client.write_registers(
                 address=addr, values=[value], device_id=self._unit
