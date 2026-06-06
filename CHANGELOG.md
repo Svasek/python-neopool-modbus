@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0](https://github.com/Svasek/python-neopool-modbus/compare/v1.0.0...v1.1.0) (2026-06-06)
+
+
+### ✨ Features
+
+* ✨ add async_probe_serial for one-shot device discovery ([#4](https://github.com/Svasek/python-neopool-modbus/issues/4)) ([29995b8](https://github.com/Svasek/python-neopool-modbus/commit/29995b8136d5de741220bd3259a4ed1ca669fc56))
+
 ## [1.0.0](https://github.com/Svasek/python-neopool-modbus/compare/v0.2.0...v1.0.0) (2026-06-06)
 
 
