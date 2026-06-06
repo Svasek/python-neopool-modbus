@@ -984,16 +984,28 @@ async def test_perform_write_register_apply(config, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_perform_write_register_logs_exception(config, monkeypatch, caplog):
-    """Test that _perform_write_register logs and raises ModbusException on get_client exception."""
+async def test_perform_write_register_logs_exception(config, monkeypatch):
+    """A get_client() failure surfaces as a ModbusException whose message
+    quotes the underlying error, so the caller (typically the coordinator
+    in Home Assistant) can include it in its own UpdateFailed log entry.
+
+    The docstring of the predecessor of this test mentioned "logs", but
+    `_perform_write_register` does not call `_LOGGER.error()` itself on
+    the catch-all exception path — it relies on the wrapping
+    ModbusException carrying the original message via `from e` so the
+    caller can log once. This test therefore asserts the message rather
+    than caplog state.
+    """
     client = neopool_modbus.NeoPoolModbusClient(config)
-    # Simulate get_client raising
     monkeypatch.setattr(
         client, "get_client", AsyncMock(side_effect=Exception("simulated error"))
     )
-    with caplog.at_level("ERROR"), pytest.raises(ModbusException):
+
+    with pytest.raises(ModbusException, match="simulated error"):
         await client._perform_write_register(0x0100, 123)
-        assert "simulated error" in caplog.text
+
+    # The address was bumped in the failed-writes counter for diagnostics.
+    assert client._failed_writes.get("0x0100") == 1
 
 
 @pytest.mark.asyncio
