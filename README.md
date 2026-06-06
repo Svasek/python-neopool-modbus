@@ -3,7 +3,18 @@
 [![PyPI](https://img.shields.io/pypi/v/neopool-modbus.svg)](https://pypi.org/project/neopool-modbus/)
 [![Python](https://img.shields.io/pypi/pyversions/neopool-modbus.svg)](https://pypi.org/project/neopool-modbus/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![CI](https://github.com/svasek/python-neopool-modbus/actions/workflows/ci.yaml/badge.svg)](https://github.com/svasek/python-neopool-modbus/actions/workflows/ci.yaml)
+
+[![Release](https://github.com/Svasek/python-neopool-modbus/actions/workflows/release.yaml/badge.svg)](https://github.com/Svasek/python-neopool-modbus/actions/workflows/release.yaml)
+[![Unit Tests](https://github.com/Svasek/python-neopool-modbus/actions/workflows/test.yaml/badge.svg)](https://github.com/Svasek/python-neopool-modbus/actions/workflows/test.yaml)
+[![Type Check](https://github.com/Svasek/python-neopool-modbus/actions/workflows/typecheck.yaml/badge.svg)](https://github.com/Svasek/python-neopool-modbus/actions/workflows/typecheck.yaml)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![codecov](https://codecov.io/github/Svasek/python-neopool-modbus/graph/badge.svg)](https://app.codecov.io/github/Svasek/python-neopool-modbus)
+
+[![Conventional Branch](https://img.shields.io/badge/Conventional%20Branch-Spec-6192c3)](https://conventional-branch.github.io/)
+[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
+[![Gitmoji](https://img.shields.io/badge/gitmoji-%20%F0%9F%98%9C%20%F0%9F%98%8D-FFDD67.svg)](https://gitmoji.dev/specification)
+[![Sponsor me](https://img.shields.io/badge/sponsor-❤-brightgreen?style=flat)](https://github.com/sponsors/svasek)
+[![Ko-fi](https://img.shields.io/badge/ko--fi-support-29abe0?style=flat&logo=ko-fi)](https://ko-fi.com/svasek)
 
 Async Python client for **Sugar Valley NeoPool** pool controllers (sold under
 brands VistaPool, Hidrolife, Aquascenic, Oxilife, Hayward, Brilix, Bayrol)
@@ -11,12 +22,8 @@ connected via **Modbus TCP**.
 
 This library is the communication layer extracted from the
 [Home Assistant `neopool` integration](https://github.com/svasek/homeassistant-vistapool-modbus)
-and is suitable for any Python project — Home Assistant, scripts, dashboards,
-or custom automation.
-
-## Status
-
-🚧 **Alpha** — under active development. Public API may change before `1.0.0`.
+and is suitable for any async Python project — Home Assistant integrations,
+scripts, dashboards, or custom automation.
 
 ## Installation
 
@@ -24,7 +31,7 @@ or custom automation.
 pip install neopool-modbus
 ```
 
-Requires Python 3.13+ and `pymodbus>=3.10.0`.
+Requires Python 3.13+ and `pymodbus>=3.10.0` (installed transitively).
 
 ## Quick start
 
@@ -35,11 +42,17 @@ from neopool_modbus import NeoPoolModbusClient
 
 
 async def main() -> None:
-    client = NeoPoolModbusClient(host="192.168.1.42", port=502, slave_id=1)
-    await client.connect()
+    client = NeoPoolModbusClient(
+        {"host": "192.168.1.42", "port": 502, "slave_id": 1}
+    )
     try:
-        data = await client.read_all()
-        print(data["measure_temperature"], data["measure_ph"])
+        data = await client.async_read_all()
+        # Keys are the upstream Sugar Valley register names from
+        # https://github.com/arendst/Tasmota/.../xsns_83_neopool.ino,
+        # values are decoded into native Python types.
+        print(f"pH:          {data['MBF_MEASURE_PH']}")           # e.g. 7.42
+        print(f"Temperature: {data['MBF_MEASURE_TEMPERATURE']} °C")  # e.g. 27.3
+        print(f"Hydrolysis:  {data['MBF_HIDRO_CURRENT']}")        # e.g. 6.5
     finally:
         await client.close()
 
@@ -47,13 +60,74 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+The client is lazy — it opens the TCP connection on first use and reuses it
+across calls; `close()` releases the socket and resets retry/backoff state.
+
+## Public API
+
+```python
+from neopool_modbus import (
+    NeoPoolModbusClient,
+    NeoPoolError,
+    NeoPoolConnectionError,
+    NeoPoolTimeoutError,
+)
+from neopool_modbus.registers import (
+    EXEC_REGISTER,
+    EEPROM_SAVE_REGISTER,
+    HEATING_SETPOINT_REGISTER,
+    INTELLIGENT_SETPOINT_REGISTER,
+    MANUAL_FILTRATION_REGISTER,
+    TIMER_BLOCKS,
+    is_valid_relay_gpio,
+)
+from neopool_modbus.decoders import (
+    parse_timer_block,
+    build_timer_block,
+    hhmm_to_seconds,
+    seconds_to_hhmm,
+    get_machine_name,
+    is_hydrolysis_in_percent,
+    # ... see neopool_modbus.decoders for the full list
+)
+from neopool_modbus.status_mask import (
+    decode_relay_state,
+    decode_named_relay_states,
+    decode_uv_lamp_state,
+    decode_hidro_status_bits,
+    decode_ion_status_bits,
+    decode_ph_rx_cl_cd_status_bits,
+)
+```
+
+The exception hierarchy (`NeoPoolError` → `NeoPoolConnectionError` /
+`NeoPoolTimeoutError`) is a forward-compatible contract; today the client
+still raises the underlying `pymodbus` exceptions directly. Catching
+`Exception` is the only safe choice for now.
+
 ## Features
 
 - Async I/O on top of `pymodbus.AsyncModbusTcpClient`
-- Batched register reads (single round-trip per register block)
-- Write-and-verify mechanism for configuration registers
-- Capability detection (hydrolysis, pH, Redox, chlorine, conductivity)
-- Strict type hints (`py.typed`), 100 % test coverage
+- Batched register reads — one round-trip per protocol page, with
+  notification-bit-driven cache invalidation so unchanged pages skip the read
+- Exponential connection retry with bounded backoff
+- Write-and-verify cycle for configuration registers
+- Capability detection (hydrolysis, pH, Redox, chlorine, conductivity, ION)
+- Strict type hints (`py.typed`), 100 % unit-test coverage
+
+## Logging
+
+The library uses a single logger named `neopool_modbus`. Enable it like any
+other Python logger:
+
+```python
+import logging
+logging.getLogger("neopool_modbus").setLevel(logging.DEBUG)
+```
+
+Home Assistant users can flip the integration's "Enable debug logging" toggle
+in the UI; the integration's `manifest.json` lists `neopool_modbus` so the
+toggle covers the library too.
 
 ## License
 
