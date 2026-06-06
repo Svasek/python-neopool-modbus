@@ -290,16 +290,16 @@ async def test_write_timer_failure(config):
 
 @pytest.mark.asyncio
 async def test_async_write_aux_relay_relay_index_invalid(config):
-    """Invalid relay_index logs an error and returns None without raising
-    or attempting any Modbus traffic."""
+    """Invalid relay_index raises ValueError fail-fast, before any Modbus
+    traffic is attempted."""
     client = neopool_modbus.NeoPoolModbusClient(config)
     # Patch get_client so the assertion below can prove it was never reached.
     sentinel = AsyncMock(side_effect=AssertionError("get_client must not be called"))
     client.get_client = sentinel  # type: ignore[method-assign]
 
-    result = await client.async_write_aux_relay(99, True)
+    with pytest.raises(ValueError, match="Invalid AUX relay index: 99"):
+        await client.async_write_aux_relay(99, True)
 
-    assert result is None
     sentinel.assert_not_called()
 
 
