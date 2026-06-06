@@ -1355,13 +1355,35 @@ class NeoPoolModbusClient:
             _LOGGER.debug("Wrote timer block %s (0x%04X): %s", block_name, addr, regs)
             await asyncio.sleep(0.1)
             # Write to EEPROM and execute
-            await client.write_registers(
+            result = await client.write_registers(
                 address=EEPROM_SAVE_REGISTER, values=[1], device_id=self._unit
             )
+            if result.isError():
+                self._failed_writes[f"0x{EEPROM_SAVE_REGISTER:04X}"] = (
+                    self._failed_writes.get(f"0x{EEPROM_SAVE_REGISTER:04X}", 0) + 1
+                )
+                _LOGGER.error(
+                    "EEPROM save failed (0x%04X) for timer block %s: %s",
+                    EEPROM_SAVE_REGISTER,
+                    block_name,
+                    result,
+                )
+                return False
             await asyncio.sleep(0.1)
-            await client.write_registers(
+            result = await client.write_registers(
                 address=EXEC_REGISTER, values=[1], device_id=self._unit
             )
+            if result.isError():
+                self._failed_writes[f"0x{EXEC_REGISTER:04X}"] = (
+                    self._failed_writes.get(f"0x{EXEC_REGISTER:04X}", 0) + 1
+                )
+                _LOGGER.error(
+                    "EXEC failed (0x%04X) for timer block %s: %s",
+                    EXEC_REGISTER,
+                    block_name,
+                    result,
+                )
+                return False
             await asyncio.sleep(0.1)
 
             self._successful_write_ops += 1

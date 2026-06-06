@@ -1091,6 +1091,77 @@ async def test_perform_write_timer_write_isError(config, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_perform_write_timer_eeprom_save_isError(config, monkeypatch):
+    """If EEPROM_SAVE_REGISTER write returns isError, _perform_write_timer must
+    return False without invoking the EXEC follow-up — otherwise the timer
+    update would silently fail to persist and the device could re-load stale
+    values after a power cycle."""
+    client = neopool_modbus.NeoPoolModbusClient(config)
+    fake_modbus = AsyncMock()
+    fake_modbus.connected = True
+
+    class DummyResp:
+        def __init__(self, regs=None, is_error=False):
+            self.registers = regs if regs is not None else []
+            self.isError = lambda: is_error
+
+    fake_modbus.read_holding_registers = AsyncMock(
+        return_value=DummyResp([0] * 15, is_error=False)
+    )
+    fake_modbus.write_registers = AsyncMock(
+        side_effect=[
+            DummyResp([], False),  # block write succeeds
+            DummyResp([], True),  # EEPROM save returns error
+            # EXEC must NOT be called — sentinel to fail the test if it is
+            DummyResp([], False),
+        ]
+    )
+    monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
+
+    result = await client._perform_write_timer("relay_aux1", {"on": 10})
+
+    assert result is False
+    # block write + EEPROM only — no EXEC follow-up
+    assert fake_modbus.write_registers.await_count == 2
+    # The failed EEPROM register address is recorded in the diagnostics counter
+    assert client._failed_writes.get("0x02F0") == 1
+
+
+@pytest.mark.asyncio
+async def test_perform_write_timer_exec_isError(config, monkeypatch):
+    """If EXEC_REGISTER write returns isError after a successful EEPROM save,
+    _perform_write_timer must return False so callers do not treat a stuck
+    apply step as a fully committed update."""
+    client = neopool_modbus.NeoPoolModbusClient(config)
+    fake_modbus = AsyncMock()
+    fake_modbus.connected = True
+
+    class DummyResp:
+        def __init__(self, regs=None, is_error=False):
+            self.registers = regs if regs is not None else []
+            self.isError = lambda: is_error
+
+    fake_modbus.read_holding_registers = AsyncMock(
+        return_value=DummyResp([0] * 15, is_error=False)
+    )
+    fake_modbus.write_registers = AsyncMock(
+        side_effect=[
+            DummyResp([], False),  # block write succeeds
+            DummyResp([], False),  # EEPROM save succeeds
+            DummyResp([], True),  # EXEC returns error
+        ]
+    )
+    monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
+
+    result = await client._perform_write_timer("relay_aux1", {"on": 10})
+
+    assert result is False
+    # All three writes were attempted in sequence
+    assert fake_modbus.write_registers.await_count == 3
+    assert client._failed_writes.get("0x02F5") == 1
+
+
+@pytest.mark.asyncio
 async def test_async_write_aux_relay_on_and_off(config, monkeypatch):
     """Test async_write_aux_relay turns AUX relay ON and OFF successfully."""
 
