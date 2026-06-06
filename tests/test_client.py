@@ -1990,25 +1990,32 @@ async def test_perform_read_all_timers_skips_when_no_installer_notification(
 async def test_perform_read_all_timers_skips_returns_all_cached_when_enabled_timers_none(
     config, monkeypatch
 ):
-    """When enabled_timers=None and the read is skipped, the full cache is returned."""
+    """When enabled_timers=None and the entire timer set is already cached,
+    the read is skipped and the full cache is returned.
+
+    The cache must cover *every* entry in TIMER_BLOCKS for the shortcut to
+    apply; partial caches fall through to the per-timer read loop (verified
+    by test_perform_read_all_timers_falls_through_when_cache_is_incomplete).
+    """
+    from neopool_modbus.registers import TIMER_BLOCKS
+
     client = neopool_modbus.NeoPoolModbusClient(config)
     client._last_was_full_read = False
     client._last_notification = 0
+    # Pre-populate the cache for every known timer block so the shortcut
+    # condition (effective_timers <= cache.keys()) is satisfied.
     client._cached_timers = {
-        "filtration1": {
-            "enable": 1,
-            "on": 3600,
-            "interval": 7200,
-            "period": 1,
-            "function": 1,
-        },
-        "filtration2": {
+        name: {
             "enable": 0,
             "on": 0,
+            "off": 0,
+            "period": 0,
             "interval": 0,
-            "period": 1,
-            "function": 1,
-        },
+            "countdown": 0,
+            "function": 0,
+            "work_time": 0,
+        }
+        for name in TIMER_BLOCKS
     }
 
     fake_modbus = AsyncMock()
@@ -2019,6 +2026,67 @@ async def test_perform_read_all_timers_skips_returns_all_cached_when_enabled_tim
 
     assert result == client._cached_timers
     fake_modbus.read_holding_registers.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_perform_read_all_timers_falls_through_when_cache_is_incomplete(
+    config, monkeypatch
+):
+    """When the requested timer set is NOT a subset of the cache, the method
+    must read the missing timers from the device instead of returning a
+    truncated cache slice.
+
+    Pre-fix behaviour: the early-return computed
+    `{k: v for k in cache if k in effective_timers}`, so a request for a
+    timer that had never been read silently produced an empty dict and the
+    caller could not distinguish it from "timer disabled / absent".
+    """
+    client = neopool_modbus.NeoPoolModbusClient(config)
+    client._last_was_full_read = False
+    client._last_notification = 0
+    # Cache holds only filtration1
+    cached_filtration1 = {
+        "enable": 1,
+        "on": 3600,
+        "off": 0,
+        "interval": 7200,
+        "period": 86400,
+        "countdown": 0,
+        "function": 1,
+        "work_time": 0,
+    }
+    client._cached_timers = {"filtration1": dict(cached_filtration1)}
+
+    # Caller asks for relay_aux1 — not in the cache, so the device must be hit.
+    class DummyResp:
+        def __init__(self, regs, is_error=False):
+            self.registers = regs
+            self.isError = lambda: is_error
+
+    # Distinct values per register so we can prove the device read happened.
+    fake_modbus = AsyncMock()
+    fake_modbus.connected = True
+    fake_modbus.read_holding_registers = AsyncMock(
+        return_value=DummyResp([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0])
+    )
+    monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
+
+    result = await client._perform_read_all_timers(
+        enabled_timers=["filtration1", "relay_aux1"]
+    )
+
+    # Both timers in the result; filtration1 from cache, relay_aux1 freshly read
+    assert set(result.keys()) == {"filtration1", "relay_aux1"}
+    assert result["filtration1"] == cached_filtration1
+    # relay_aux1 was decoded from the freshly-fetched registers (function field
+    # is byte 11 = 7, picked from the DummyResp above)
+    assert result["relay_aux1"]["function"] == 7
+    # Exactly one device read happened — the missing timer
+    assert fake_modbus.read_holding_registers.await_count == 1
+    call = fake_modbus.read_holding_registers.await_args_list[0]
+    from neopool_modbus.registers import TIMER_BLOCKS
+
+    assert call.kwargs["address"] == TIMER_BLOCKS["relay_aux1"]
 
 
 @pytest.mark.asyncio

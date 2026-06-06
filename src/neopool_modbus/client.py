@@ -1220,12 +1220,21 @@ class NeoPoolModbusClient:
         )
         force_read = set(force_read or ()) & effective_timers
 
-        # Skip timer reads if the INSTALLER page has not changed since the last poll
-        # and this is not a forced full read.
+        # Skip timer reads if the INSTALLER page has not changed since the last poll,
+        # this is not a forced full read, AND every requested timer is already
+        # cached. If any requested timer is missing from the cache (e.g. the
+        # caller asked for `relay_aux1` but only `filtration1` was previously
+        # read), we still have to hit the device for the missing entries; the
+        # per-timer loop below will reuse the cached values for the rest.
         can_use_cache = not self._last_was_full_read and not (
             self._last_notification & _NOTIF_INSTALLER
         )
-        if can_use_cache and self._cached_timers and not force_read:
+        if (
+            can_use_cache
+            and self._cached_timers
+            and not force_read
+            and effective_timers <= self._cached_timers.keys()
+        ):
             _LOGGER.debug("Skipping timer read (no INSTALLER change notification)")
             return {
                 k: v for k, v in self._cached_timers.items() if k in effective_timers
