@@ -175,6 +175,34 @@ async def test_establish_connection_with_retry_failure(config):
 
 
 @pytest.mark.asyncio
+async def test_establish_connection_with_retry_returns_false(config):
+    """Test failed connection where connect() returns False (no exception)."""
+    client = neopool_modbus.NeoPoolModbusClient(config)
+    with patch.object(neopool_modbus, "AsyncModbusTcpClient") as MockClient:
+        mock_instance = MockClient.return_value
+        mock_instance.connect = AsyncMock(return_value=False)
+        mock_instance.connected = False
+
+        with pytest.raises(neopool_modbus.ConnectionException):
+            await client._establish_connection_with_retry()
+        assert client._backoff_until is not None
+
+
+@pytest.mark.asyncio
+async def test_get_client_first_call_establishes_connection(config):
+    """A fresh client without an existing connection delegates to
+    _establish_connection_with_retry on the first get_client() call."""
+    client = neopool_modbus.NeoPoolModbusClient(config)
+    sentinel = AsyncMock(return_value="established")
+    client._establish_connection_with_retry = sentinel  # type: ignore[method-assign]
+
+    result = await client.get_client()
+
+    assert result == "established"
+    sentinel.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_is_connection_healthy_recent_success(config):
     """Test connection health check with recent successful operation."""
     client = neopool_modbus.NeoPoolModbusClient(config)
@@ -261,21 +289,18 @@ async def test_write_timer_failure(config):
 
 
 @pytest.mark.asyncio
-async def test_async_write_aux_relay_success(config):
-    """Test async_write_aux_relay returns None (success) or {} (connection error)."""
+async def test_async_write_aux_relay_relay_index_invalid(config):
+    """Invalid relay_index logs an error and returns None without raising
+    or attempting any Modbus traffic."""
     client = neopool_modbus.NeoPoolModbusClient(config)
-    client._perform_write_aux_relay = AsyncMock(return_value=None)  # type: ignore[attr-defined]
-    with pytest.raises(ModbusException):
-        await client.async_write_aux_relay(1, True)
+    # Patch get_client so the assertion below can prove it was never reached.
+    sentinel = AsyncMock(side_effect=AssertionError("get_client must not be called"))
+    client.get_client = sentinel  # type: ignore[method-assign]
 
+    result = await client.async_write_aux_relay(99, True)
 
-@pytest.mark.asyncio
-async def test_async_write_aux_relay_failure(config):
-    """Test async_write_aux_relay returns {} if _perform_write_aux_relay raises Exception."""
-    client = neopool_modbus.NeoPoolModbusClient(config)
-    client._perform_write_aux_relay = AsyncMock(side_effect=Exception("aux fail"))  # type: ignore[attr-defined]
-    with pytest.raises(ModbusException):
-        await client.async_write_aux_relay(1, True)
+    assert result is None
+    sentinel.assert_not_called()
 
 
 @pytest.mark.asyncio

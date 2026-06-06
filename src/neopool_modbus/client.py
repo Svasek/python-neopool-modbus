@@ -1110,11 +1110,16 @@ class NeoPoolModbusClient:
 
     """ Manual controller for AUX relays (1-4) """
 
-    async def async_write_aux_relay(
-        self, relay_index: int, on: bool
-    ) -> dict[str, Any] | None:
-        """Write state of an AUX relay (1-4) using function 0x10 (Write Multiple Registers)."""
-        if relay_index not in AUX_BITMASKS:  # pragma: no cover
+    async def async_write_aux_relay(self, relay_index: int, on: bool) -> None:
+        """Write state of an AUX relay (1-4) using function 0x10 (Write Multiple Registers).
+
+        Returns ``None`` on success. Raises :exc:`ModbusException` on any
+        connection, read, or write error; the four follow-up writes
+        (relay enable, relay value, 0x0289 commit trigger, EXEC_REGISTER)
+        each validate ``isError()`` so a silent device-side rejection cannot
+        be reported as success.
+        """
+        if relay_index not in AUX_BITMASKS:
             _LOGGER.error("Invalid AUX relay index: %s (expected 1-4)", relay_index)
             return None
         aux_bit = AUX_BITMASKS[relay_index]
