@@ -1,0 +1,93 @@
+name: Release
+
+# NOTE: Automatic triggers are temporarily disabled until the PyPI Trusted
+# Publisher (see https://docs.pypi.org/trusted-publishers/) is configured for
+# this project. Until then this workflow is invocable only via the GitHub UI
+# (workflow_dispatch). Once the publisher is set up, restore:
+#
+#   push:
+#     branches:
+#       - main
+#
+# under `on:` below.
+on:
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Run release-please
+        uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ secrets.MY_RELEASE_PLEASE_TOKEN }}
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/neopool-modbus/${{ needs.release-please.outputs.version }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout the released tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install build backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Verify artifacts contain py.typed and __version__
+        run: |
+          set -euo pipefail
+          ls -lh dist/
+          # Confirm the wheel ships the py.typed marker
+          unzip -l dist/neopool_modbus-*.whl | grep -q "neopool_modbus/py.typed"
+          # Confirm version in __init__ matches the tag
+          tag_version="${{ needs.release-please.outputs.version }}"
+          init_version=$(grep -E '^__version__ =' src/neopool_modbus/__init__.py | sed -E 's/^__version__ = "([^"]+)".*$/\1/')
+          if [ "$tag_version" != "$init_version" ]; then
+            echo "Version mismatch: tag=$tag_version, __init__=$init_version" >&2
+            exit 1
+          fi
+
+      - name: Publish to PyPI via Trusted Publisher
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+      - name: Upload artifacts to GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ needs.release-please.outputs.tag_name }}" dist/* --clobber
