@@ -240,9 +240,9 @@ class NeoPoolModbusClient:
           broadcast is identified by data[0] == unit_id and data[1] == 0x20.
 
         - **SOCKET (Modbus TCP) framing**: The first two bytes are the MBAP Transaction
-          ID, and bytes 2–3 are the Protocol Identifier, which is always 0x0000 for any
+          ID, and bytes 2-3 are the Protocol Identifier, which is always 0x0000 for any
           valid Modbus TCP frame. FC20 broadcasts are raw RTU bytes forwarded without an
-          MBAP header, so their bytes 2–3 are NOT 0x0000 (they are 0x0201). This lets us
+          MBAP header, so their bytes 2-3 are NOT 0x0000 (they are 0x0201). This lets us
           safely distinguish them from a legitimate response whose TID happens to equal
           (unit_id << 8 | 0x20).
 
@@ -261,7 +261,7 @@ class NeoPoolModbusClient:
             is_rtu = self._framer == FramerType.RTU
 
             # Small prefix buffer used only in SOCKET framing.  When a TCP read
-            # delivers only 2–3 bytes that start with [unit_id, 0x20] we cannot
+            # delivers only 2-3 bytes that start with [unit_id, 0x20] we cannot
             # yet inspect the MBAP Protocol Identifier at bytes 2-3.  We stash
             # those bytes here and prepend them to the very next chunk so the
             # decision (drop FC20 vs forward valid MBAP) is always made with at
@@ -274,7 +274,7 @@ class NeoPoolModbusClient:
                 # For RTU framing: data[0]=slave_id, data[1]=function_code.
                 # For SOCKET framing: data[0:2]=TID, data[2:4]=Protocol ID (0x0000
                 # for valid Modbus TCP). Raw FC20 broadcasts have no MBAP header, so
-                # bytes 2-3 are NOT 0x0000 — this is the distinguishing signal.
+                # bytes 2-3 are NOT 0x0000 - this is the distinguishing signal.
                 if not is_rtu:
                     # Reassemble any previously buffered prefix.
                     if _socket_buf:
@@ -518,13 +518,13 @@ class NeoPoolModbusClient:
             Request MEASURE page of registers starting from 0x0100
             Contains the different measurement information including hydrolysis current, pH level, redox level, etc.
             For measurements registers, we have to use function 0x04 (Read Input Registers).
-            Always read first – provides live measurements and the MBF_NOTIFICATION register
+            Always read first - provides live measurements and the MBF_NOTIFICATION register
             (0x0110) which determines which configuration pages need to be refreshed.
             """
 
             reg01 = await self._read_register_ranges(
                 client,
-                [(0x0100, 18)],  # 0x0100–0x0111
+                [(0x0100, 18)],  # 0x0100-0x0111
                 read_func=client.read_input_registers,
                 label="rr01",
             )
@@ -593,7 +593,7 @@ class NeoPoolModbusClient:
                     _FULL_READ_INTERVAL,
                 )
             elif notification:
-                _LOGGER.debug("Partial read – MBF_NOTIFICATION: 0x%04X", notification)
+                _LOGGER.debug("Partial read - MBF_NOTIFICATION: 0x%04X", notification)
             else:
                 _LOGGER.debug(
                     "No page changes reported by device, config registers served from cache"
@@ -608,8 +608,8 @@ class NeoPoolModbusClient:
                 reg00 = await self._read_register_ranges(
                     client,
                     [
-                        (0x0000, 16),  # 0x0000–0x000F
-                        # (0x0022, 2),  # 0x0022–0x0024 (24-36V, 12V, 5V lines)
+                        (0x0000, 16),  # 0x0000-0x000F
+                        # (0x0022, 2),  # 0x0022-0x0024 (24-36V, 12V, 5V lines)
                         # (0x006A, 1),  # 0x006A (5V line)
                         # (0x0072, 1),  # 0x0072 (4-20mA line)
                     ],
@@ -645,8 +645,8 @@ class NeoPoolModbusClient:
                 reg02 = await self._read_register_ranges(
                     client,
                     [
-                        (0x0206, 20),  # 0x0206–0x0219
-                        (0x0280, 2),   # 0x0280–0x0281 (hidrolysis module version and connectivity)
+                        (0x0206, 20),  # 0x0206-0x0219
+                        (0x0280, 2),   # 0x0280-0x0281 (hidrolysis module version and connectivity)
                     ],
                     label="rr02",
                 )
@@ -659,9 +659,9 @@ class NeoPoolModbusClient:
                     "MBF_CELL_RUNTIME_HIGH":     get_safe(reg02, 1),            # 0x0207*        ! Cell runtime (32 bit value - high word)
                     "MBF_CELL_RUNTIME_PART_LOW": get_safe(reg02, 2),            # 0x0208*        ! Cell part runtime (32 bit value - low word)
                     "MBF_CELL_RUNTIME_PART_HIGH":get_safe(reg02, 3),            # 0x0209*        ! Cell part runtime (32 bit value - high word)
-                    # 0x020A–0x020B skipped
+                    # 0x020A-0x020B skipped
                     "MBF_CELL_BOOST":            get_safe(reg02, 6),            # 0x020C* mask   ! Boost control (see MBMSK_CELL_BOOST_*)
-                    # 0x020D–0x0213 skipped
+                    # 0x020D-0x0213 skipped
                     "MBF_CELL_RUNTIME_POLA_LOW": get_safe(reg02, 14),           # 0x0214*        ! Cell runtime polarity 1 (32 bit value - low word)
                     "MBF_CELL_RUNTIME_POLA_HIGH":get_safe(reg02, 15),           # 0x0215*        ! Cell runtime polarity 1 (32 bit value - high word)
                     "MBF_CELL_RUNTIME_POLB_LOW": get_safe(reg02, 16),           # 0x0216*        ! Cell runtime polarity 2 (32 bit value - low word)
@@ -687,8 +687,8 @@ class NeoPoolModbusClient:
                 reg03 = await self._read_register_ranges(
                     client,
                     [
-                        (0x0300, 13),  # 0x0300–0x030C
-                        (0x0322, 4),  # 0x0322–0x0325
+                        (0x0300, 13),  # 0x0300-0x030C
+                        (0x0322, 4),  # 0x0322-0x0325
                     ],
                     label="rr03",
                 )
@@ -700,14 +700,14 @@ class NeoPoolModbusClient:
                     "MBF_PAR_MODEL": get_safe(reg03, 1),                            # 0x0301* mask   System model options
                     "MBF_PAR_SERNUM": get_safe(reg03, 2),                           # 0x0302*        Serial number of the PowerBox
                     "MBF_PAR_ION_NOM":  get_safe(reg03, 3),                         # 0x0303*        Ionization maximum production level (DO NOT WRITE!)
-                    # 0x0304–0x0305 skipped
+                    # 0x0304-0x0305 skipped
                     "MBF_PAR_HIDRO_NOM":  get_safe(reg03, 6, lambda v: v / 10.0),   # 0x0306*        Hydrolysis maximum production level. (DO NOT WRITE!) If the hydrolysis is set to work in percent mode, this value will be 100. If the hydrolysis module is set to work in g/h production, this module will contain the maximum amount of production in g/h units. (DO NOT WRITE!)
                     "MBF_PAR_HIDRO_NOM2": get_safe(reg03, 7),                       # 0x0307*        Hydrolysis maximum production level in g/h units (DO NOT WRITE!). This value is probably used only when the hydrolysis module is set to work in g/h production mode.
-                    # 0x0308–0x0309 skipped
+                    # 0x0308-0x0309 skipped
                     "MBF_PAR_SAL_AMPS":  get_safe(reg03, 10),                       # 0x030A         Current command in regulation for which we are going to measure voltage
                     "MBF_PAR_SAL_CELLK":  get_safe(reg03, 11),                      # 0x030B         Specifies the relationship between the resistance obtained in the measurement process and its equivalence in g / l (grams per liter)
                     "MBF_PAR_SAL_TCOMP":  get_safe(reg03, 12),                      # 0x030C         Specifies the deviation in temperature from the conductivity.
-                    # 0x030D–0x0321 skipped
+                    # 0x030D-0x0321 skipped
                     "MBF_PAR_HIDRO_MAX_VOLTAGE": get_safe(reg03, 13),               # 0x0322         Allows setting the maximum voltage value that can be reached with the hydrolysis current regulation. The value is specified in tenths of a volt. The default value of this register when the EEPROM is cleared is 80, which is equivalent to a maximum cell operating voltage of 8 volts.
                     "MBF_PAR_HIDRO_FLOW_SIGNAL": get_safe(reg03, 14),               # 0x0323         Allows to select the operation of the flow detection signal associated with the operation of the hydrolysis (see MBV_PAR_HIDRO_FLOW_SIGNAL*). The default value for this register is 0 (standard detection).
                     "MBF_PAR_HIDRO_MAX_PWM_STEP_UP": get_safe(reg03, 15),           # 0x0324         This register sets the PWM ramp up of the hydrolysis in pulses per duty cycle. This register makes it possible to adjust the rate at which the power delivered to the cell increases, allowing a gradual rise in power so that the operation of the switching source of the equipment is not saturated. Default 150
@@ -729,16 +729,16 @@ class NeoPoolModbusClient:
 
                 # Read configuration registers in multiple blocks due to device limits.
                 # Blocks covered:
-                #   0x0408–0x0426  (31 registers) - general config (relay GPIOs, offsets, etc.)
-                #   0x0427–0x0433  (13 registers) - pH/redox/chlorine config
-                #   0x0434–0x04E7  - TIMER_BLOCKS, read separately via read_all_timers()
-                #   0x04E8–0x04EF  ( 8 registers) - FILTVALVE / backwash valve config
+                #   0x0408-0x0426  (31 registers) - general config (relay GPIOs, offsets, etc.)
+                #   0x0427-0x0433  (13 registers) - pH/redox/chlorine config
+                #   0x0434-0x04E7  - TIMER_BLOCKS, read separately via read_all_timers()
+                #   0x04E8-0x04EF  ( 8 registers) - FILTVALVE / backwash valve config
                 reg04 = await self._read_register_ranges(
                     client,
                     [
-                        (0x0408, 31),  # 0x0408–0x0426
-                        (0x0427, 13),  # 0x0427–0x0433
-                        (0x04E8, 8),  # 0x04E8–0x04EF  FILTVALVE / backwash registers
+                        (0x0408, 31),  # 0x0408-0x0426
+                        (0x0427, 13),  # 0x0427-0x0433
+                        (0x04E8, 8),  # 0x04E8-0x04EF  FILTVALVE / backwash registers
                     ],
                     label="rr04",
                 )
@@ -790,7 +790,7 @@ class NeoPoolModbusClient:
                     "MBF_PAR_RELAY_MAX_TIME": get_safe(reg04, 41),                              # 0x0431         Maximum amount of time in seconds, that a dosing pump can operate before rising an alarm signal. The behavior of the system when the dosing time is exceeded is regulated by the type of action stored in the MBF_PAR_RELAY_MODE register.
                     "MBF_PAR_RELAY_MODE": get_safe(reg04, 42),                                  # 0x0432         Behavior of the system when the dosing time is exceeded (see MBMSK_PAR_RELAY_MODE_* and MBV_PAR_RELAY_MODE_*)
                     "MBF_PAR_RELAY_ACTIVATION_DELAY": get_safe(reg04, 43, lambda v: v + 10),    # 0x0433         Delay time in seconds for the pH pump when the measured pH value is outside the allowable pH setpoints. The system internally adds an extra time of 10 seconds to the value stored here. The pump starts the dosing operation once the condition of pH out of valid interval is maintained during the time specified in this register.
-                    # FILTVALVE / backwash registers (0x04E8–0x04EF) at reg04 indices 44–51
+                    # FILTVALVE / backwash registers (0x04E8-0x04EF) at reg04 indices 44-51
                     "MBF_PAR_FILTVALVE_ENABLE": get_safe(reg04, 44),                            # 0x04E8        Filter cleaning mode (0 = off, 1 = Besgo valve)
                     "MBF_PAR_FILTVALVE_MODE": get_safe(reg04, 45),                              # 0x04E9        Filter cleaning valve timing mode (MBV_PAR_CTIMER_ENABLED/ALWAYS_ON/ALWAYS_OFF)
                     "MBF_PAR_FILTVALVE_GPIO": get_safe(reg04, 46),                              # 0x04EA        Relay assigned to the filter cleaning function
@@ -840,7 +840,7 @@ class NeoPoolModbusClient:
                 """
                 reg05 = await self._read_register_ranges(
                     client,
-                    [(0x0502, 14)],  # 0x0502–0x050F
+                    [(0x0502, 14)],  # 0x0502-0x050F
                     label="rr05",
                 )
 
@@ -850,7 +850,7 @@ class NeoPoolModbusClient:
                     "MBF_PAR_HIDRO": get_safe(reg05, 0, lambda v: v / 10.0),    # 0x0502        Hydrolisis target production level
                     "MBF_PAR_PH1": get_safe(reg05, 2, lambda v: v / 100.0),     # 0x0504        Higher limit of the pH regulation system
                     "MBF_PAR_PH2": get_safe(reg05, 3, lambda v: v / 100.0),     # 0x0505        Lower limit of the pH regulation system
-                    # 0x0506–0x0507 skipped
+                    # 0x0506-0x0507 skipped
                     "MBF_PAR_RX1": get_safe(reg05, 6),                          # 0x0508        Set point for the redox regulation system
                     # 0x0509 skipped
                     "MBF_PAR_CL1": get_safe(reg05, 8, lambda v: v / 100.0),     # 0x050A        Set point for the chlorine regulation system
@@ -873,7 +873,7 @@ class NeoPoolModbusClient:
                     client,
                     [
                         # Includes full NAME_BOLD 0x0608-0x060B and NAME_LIGHT 0x060C-0x060F
-                        (0x0600, 16),  # 0x0600–0x060F
+                        (0x0600, 16),  # 0x0600-0x060F
                     ],
                     label="rr06",
                 )
@@ -1115,7 +1115,7 @@ class NeoPoolModbusClient:
     ) -> dict[str, Any] | None:
         """Write state of an AUX relay (1-4) using function 0x10 (Write Multiple Registers)."""
         if relay_index not in AUX_BITMASKS:  # pragma: no cover
-            _LOGGER.error("Invalid AUX relay index: %s (expected 1–4)", relay_index)
+            _LOGGER.error("Invalid AUX relay index: %s (expected 1-4)", relay_index)
             return None
         aux_bit = AUX_BITMASKS[relay_index]
         addr = 0x010E
