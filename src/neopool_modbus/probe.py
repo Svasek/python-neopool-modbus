@@ -47,7 +47,7 @@ def _resolve_framer(framer: str) -> FramerType:
         return FramerType.RTU
     if framer_str == "tcp":
         return FramerType.SOCKET
-    raise ValueError(f"Unknown modbus_framer: {framer!r} (expected 'tcp' or 'rtu')")
+    raise ValueError(f"Unknown framer: {framer!r} (expected 'tcp' or 'rtu')")
 
 
 async def async_probe_serial(
@@ -91,6 +91,12 @@ async def async_probe_serial(
     try:
         try:
             connected = await asyncio.wait_for(client.connect(), timeout=timeout)
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError as exc:
+            raise NeoPoolError(
+                f"Probe connect to {host}:{port} timed out after {timeout}s"
+            ) from exc
         except Exception as exc:
             raise NeoPoolError(
                 f"Probe connect failed for {host}:{port}: {exc}"
@@ -108,6 +114,12 @@ async def async_probe_serial(
                 ),
                 timeout=timeout,
             )
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError as exc:
+            raise NeoPoolError(
+                f"Probe read from {host}:{port} timed out after {timeout}s"
+            ) from exc
         except Exception as exc:
             raise NeoPoolError(f"Probe read failed for {host}:{port}: {exc}") from exc
 

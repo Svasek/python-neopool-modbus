@@ -56,7 +56,7 @@ def test_resolve_framer_rtu():
 
 
 def test_resolve_framer_invalid():
-    with pytest.raises(ValueError, match="Unknown modbus_framer"):
+    with pytest.raises(ValueError, match="Unknown framer"):
         _resolve_framer("bogus")
 
 
@@ -96,7 +96,7 @@ async def test_async_probe_serial_connect_timeout():
     fake_client.connect = AsyncMock(side_effect=TimeoutError("connect t/o"))
     with (
         patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client),
-        pytest.raises(NeoPoolError, match="connect failed"),
+        pytest.raises(NeoPoolError, match=r"connect to .* timed out after"),
     ):
         await async_probe_serial("192.0.2.10")
 
@@ -118,7 +118,7 @@ async def test_async_probe_serial_read_timeout():
     fake_client.read_holding_registers = AsyncMock(side_effect=TimeoutError("read t/o"))
     with (
         patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client),
-        pytest.raises(NeoPoolError, match="read failed"),
+        pytest.raises(NeoPoolError, match=r"read from .* timed out after"),
     ):
         await async_probe_serial("192.0.2.10")
 
@@ -169,7 +169,7 @@ async def test_async_probe_serial_invalid_framer():
     """A bad framer string must raise ValueError before any TCP work."""
     with (
         patch("neopool_modbus.probe.AsyncModbusTcpClient") as ctor,
-        pytest.raises(ValueError, match="Unknown modbus_framer"),
+        pytest.raises(ValueError, match="Unknown framer"),
     ):
         await async_probe_serial("192.0.2.10", framer="ascii")
     ctor.assert_not_called()
@@ -209,6 +209,32 @@ async def test_async_probe_serial_close_cancelled_propagates():
         read_result=_make_response([0x0001] * 6),
     )
     fake_client.close = MagicMock(side_effect=asyncio.CancelledError())
+    with (
+        patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await async_probe_serial("192.0.2.10")
+
+
+@pytest.mark.asyncio
+async def test_async_probe_serial_connect_cancelled_propagates():
+    """asyncio.CancelledError from connect() must propagate unchanged,
+    never be wrapped into a NeoPoolError."""
+    fake_client = _make_client()
+    fake_client.connect = AsyncMock(side_effect=asyncio.CancelledError())
+    with (
+        patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await async_probe_serial("192.0.2.10")
+
+
+@pytest.mark.asyncio
+async def test_async_probe_serial_read_cancelled_propagates():
+    """asyncio.CancelledError from read_holding_registers() must propagate
+    unchanged, never be wrapped into a NeoPoolError."""
+    fake_client = _make_client(connect_result=True)
+    fake_client.read_holding_registers = AsyncMock(side_effect=asyncio.CancelledError())
     with (
         patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client),
         pytest.raises(asyncio.CancelledError),

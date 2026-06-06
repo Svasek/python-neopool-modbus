@@ -14,9 +14,10 @@
 
 """Async Python client for Sugar Valley NeoPool Modbus pool controllers.
 
-The top-level package exposes only the high-level :class:`NeoPoolModbusClient`
-and the public exception hierarchy.  Lower-level helpers are intentionally
-kept in submodules to keep the public surface small:
+The top-level package re-exports the high-level :class:`NeoPoolModbusClient`,
+the public exception hierarchy, and the :func:`async_probe_serial` one-shot
+helper.  Lower-level helpers are intentionally kept in submodules to keep
+the public surface small:
 
 - :mod:`neopool_modbus.registers`   - register addresses, bit masks, timer block layouts
 - :mod:`neopool_modbus.decoders`    - register-value parsers and timer helpers
