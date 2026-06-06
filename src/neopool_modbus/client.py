@@ -1121,9 +1121,7 @@ class NeoPoolModbusClient:
         be reported as success.
         """
         if relay_index not in AUX_BITMASKS:
-            raise ValueError(
-                f"Invalid AUX relay index: {relay_index} (expected 1-4)"
-            )
+            raise ValueError(f"Invalid AUX relay index: {relay_index} (expected 1-4)")
         aux_bit = AUX_BITMASKS[relay_index]
         addr = 0x010E
         start = time.monotonic()
