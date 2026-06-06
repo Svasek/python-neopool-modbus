@@ -47,22 +47,6 @@ def is_valid_relay_gpio(gpio: int) -> bool:
     return 1 <= gpio <= MAX_RELAY_GPIO
 
 
-# Period keys (used by relay timer blocks) mapped to their length in seconds.
-PERIOD_MAP = {
-    "1_day": 86400,
-    "2_days": 2 * 86400,
-    "3_days": 3 * 86400,
-    "4_days": 4 * 86400,
-    "5_days": 5 * 86400,
-    "1_week": 7 * 86400,
-    "2_weeks": 14 * 86400,
-    "3_weeks": 21 * 86400,
-    "4_weeks": 28 * 86400,
-}
-
-# Inverse lookup: number of seconds -> period key.
-PERIOD_SECONDS_TO_KEY = {v: k for k, v in PERIOD_MAP.items()}
-
 # Timer blocks 0x0434-0x04E8 are read in groups of 15 registers due to the
 # device's per-request limit.
 TIMER_BLOCKS = {
@@ -89,8 +73,6 @@ __all__ = [
     "INTELLIGENT_SETPOINT_REGISTER",
     "MANUAL_FILTRATION_REGISTER",
     "MAX_RELAY_GPIO",
-    "PERIOD_MAP",
-    "PERIOD_SECONDS_TO_KEY",
     "TIMER_BLOCKS",
     "is_valid_relay_gpio",
 ]
