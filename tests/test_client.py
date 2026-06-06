@@ -968,13 +968,19 @@ async def test_perform_write_register_confirm_isError(config, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_perform_write_register_not_connected(config, monkeypatch):
-    """Test _perform_write_register raises NeoPoolConnectionError if client is not connected."""
+    """Test _perform_write_register raises NeoPoolConnectionError if client is not connected.
+
+    Regression: the inner pre-bump and the outer NeoPoolError handler used
+    to both increment _failed_writes for the same address, double-counting
+    a single failed operation in diagnostics.
+    """
     client = neopool_modbus.NeoPoolModbusClient(config)
     fake_modbus = AsyncMock()
     fake_modbus.connected = False
     monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
     with pytest.raises(NeoPoolConnectionError):
         await client._perform_write_register(0x0100, 123)
+    assert client._failed_writes.get("0x0100") == 1
 
 
 @pytest.mark.asyncio
@@ -1311,7 +1317,12 @@ async def test_async_write_aux_relay_on_and_off(config, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_async_write_aux_relay_not_connected(config, monkeypatch):
-    """Test async_write_aux_relay raises NeoPoolConnectionError if client is not connected."""
+    """Test async_write_aux_relay raises NeoPoolConnectionError if client is not connected.
+
+    Regression: the inner pre-bump and the outer NeoPoolError handler used
+    to both increment _failed_writes for the same address, double-counting
+    a single failed operation in diagnostics.
+    """
 
     client = neopool_modbus.NeoPoolModbusClient(config)
     fake_modbus = AsyncMock()
@@ -1321,6 +1332,7 @@ async def test_async_write_aux_relay_not_connected(config, monkeypatch):
 
     with pytest.raises(NeoPoolConnectionError):
         await client.async_write_aux_relay(1, True)
+    assert client._failed_writes.get("0x010E") == 1
 
 
 @pytest.mark.asyncio

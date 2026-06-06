@@ -525,9 +525,6 @@ class NeoPoolModbusClient:
         try:
             client = await self.get_client()
             if client is None or not client.connected:  # pragma: no cover
-                self._failed_reads["connection"] = (
-                    self._failed_reads.get("connection", 0) + 1
-                )
                 raise NeoPoolConnectionError(
                     f"Modbus client connection failed to {self._host}:{self._port}"
                 )
@@ -935,7 +932,8 @@ class NeoPoolModbusClient:
                     )
 
         except NeoPoolError:
-            self._failed_reads["unknown"] = self._failed_reads.get("unknown", 0) + 1
+            # Inner per-address counters in _read_register_ranges have already
+            # been bumped; do not double-count under "unknown" here.
             raise
         except TimeoutError as e:  # pragma: no cover
             self._failed_reads["unknown"] = self._failed_reads.get("unknown", 0) + 1
@@ -1037,9 +1035,6 @@ class NeoPoolModbusClient:
         try:
             client = await self.get_client()
             if client is None or not client.connected:
-                self._failed_writes[f"0x{address:04X}"] = (
-                    self._failed_writes.get(f"0x{address:04X}", 0) + 1
-                )
                 raise NeoPoolConnectionError(
                     f"Modbus client connection failed to {self._host}:{self._port}"
                 )
@@ -1166,9 +1161,6 @@ class NeoPoolModbusClient:
         try:
             client = await self.get_client()
             if client is None or not client.connected:
-                self._failed_writes[f"0x{addr:04X}"] = (
-                    self._failed_writes.get(f"0x{addr:04X}", 0) + 1
-                )
                 raise NeoPoolConnectionError(
                     f"Modbus client connection failed to {self._host}:{self._port}"
                 )
