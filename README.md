@@ -75,6 +75,7 @@ from neopool_modbus import (
     async_probe_serial,
 )
 from neopool_modbus.registers import (
+    DEFAULT_MODBUS_FRAMER,
     EXEC_REGISTER,
     EEPROM_SAVE_REGISTER,
     HEATING_SETPOINT_REGISTER,
