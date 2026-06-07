@@ -32,6 +32,7 @@ from .client import NeoPoolModbusClient
 from .exceptions import (
     NeoPoolConnectionError,
     NeoPoolError,
+    NeoPoolModbusError,
     NeoPoolTimeoutError,
 )
 from .probe import async_probe_serial
@@ -42,6 +43,7 @@ __all__ = [
     "NeoPoolConnectionError",
     "NeoPoolError",
     "NeoPoolModbusClient",
+    "NeoPoolModbusError",
     "NeoPoolTimeoutError",
     "__version__",
     "async_probe_serial",

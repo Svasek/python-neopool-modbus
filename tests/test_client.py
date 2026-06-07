@@ -21,8 +21,11 @@ import pytest
 from pymodbus.framer import FramerType
 
 import neopool_modbus.client as neopool_modbus
-
-ModbusException = neopool_modbus.ModbusException
+from neopool_modbus.exceptions import (
+    NeoPoolConnectionError,
+    NeoPoolModbusError,
+    NeoPoolTimeoutError,
+)
 
 
 @pytest.fixture
@@ -169,7 +172,7 @@ async def test_establish_connection_with_retry_failure(config):
         mock_instance.connect = AsyncMock(side_effect=Exception("fail"))
         mock_instance.connected = False
 
-        with pytest.raises(neopool_modbus.ConnectionException):
+        with pytest.raises(NeoPoolConnectionError):
             await client._establish_connection_with_retry()
         assert client._backoff_until is not None
 
@@ -183,7 +186,22 @@ async def test_establish_connection_with_retry_returns_false(config):
         mock_instance.connect = AsyncMock(return_value=False)
         mock_instance.connected = False
 
-        with pytest.raises(neopool_modbus.ConnectionException):
+        with pytest.raises(NeoPoolConnectionError):
+            await client._establish_connection_with_retry()
+        assert client._backoff_until is not None
+
+
+@pytest.mark.asyncio
+async def test_establish_connection_with_retry_timeout(config):
+    """asyncio.wait_for(connect()) raising TimeoutError must surface as
+    NeoPoolTimeoutError after the retry budget is exhausted."""
+    client = neopool_modbus.NeoPoolModbusClient(config)
+    with patch.object(neopool_modbus, "AsyncModbusTcpClient") as MockClient:
+        mock_instance = MockClient.return_value
+        mock_instance.connect = AsyncMock(side_effect=TimeoutError("connect timeout"))
+        mock_instance.connected = False
+
+        with pytest.raises(NeoPoolTimeoutError):
             await client._establish_connection_with_retry()
         assert client._backoff_until is not None
 
@@ -306,11 +324,11 @@ async def test_async_write_aux_relay_relay_index_invalid(config):
 @pytest.mark.asyncio
 async def test_write_register_connection_lost(config):
     client = neopool_modbus.NeoPoolModbusClient(config)
-    # Simulate a ConnectionException during write
+    # Simulate a NeoPoolConnectionError during write
     client._perform_write_register = AsyncMock(
-        side_effect=neopool_modbus.ConnectionException("connection lost")
+        side_effect=NeoPoolConnectionError("connection lost")
     )
-    with pytest.raises(neopool_modbus.ConnectionException):
+    with pytest.raises(NeoPoolConnectionError):
         await client.async_write_register(0x0100, 456)
     assert client._consecutive_errors == 1
 
@@ -563,11 +581,33 @@ async def test_perform_read_all_raises_on_block(
     monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
 
     # Run test
-    with pytest.raises(ModbusException):
+    with pytest.raises(NeoPoolModbusError):
         await client._perform_read_all()
 
     # Always check that the error was logged
     assert client._failed_reads.get(address, 0) == 1
+
+
+@pytest.mark.asyncio
+async def test_perform_read_all_timeout_surfaces_as_timeout_error(config, monkeypatch):
+    """A TimeoutError raised by pymodbus during a register-range read must
+    surface as NeoPoolTimeoutError (not NeoPoolModbusError) so callers can
+    distinguish a transport timeout from a Modbus protocol error."""
+    from neopool_modbus.client import NeoPoolModbusClient
+
+    client = NeoPoolModbusClient(config)
+    fake_modbus = AsyncMock()
+    fake_modbus.connected = True
+    # The very first read in _perform_read_all is read_input_registers for rr01
+    # (page 0x0100). Make it time out so the TimeoutError branch in
+    # _read_register_ranges is exercised.
+    fake_modbus.read_input_registers = AsyncMock(side_effect=TimeoutError("read t/o"))
+    monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
+
+    with pytest.raises(NeoPoolTimeoutError):
+        await client._perform_read_all()
+
+    assert client._failed_reads.get("0x0100", 0) == 1
 
 
 @pytest.mark.asyncio
@@ -652,7 +692,7 @@ async def test_perform_read_all_block_exception(
 
     monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
 
-    with pytest.raises(ModbusException):
+    with pytest.raises(NeoPoolModbusError):
         await client._perform_read_all()
     key = f"0x{address:04X}"
     assert client._failed_reads.get(key, 0) == 1
@@ -802,7 +842,7 @@ async def test_perform_read_all_timers_not_connected(config, monkeypatch):
 
     monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
 
-    with pytest.raises(ModbusException):
+    with pytest.raises(NeoPoolConnectionError):
         await client._perform_read_all_timers()
 
 
@@ -928,25 +968,45 @@ async def test_perform_write_register_confirm_isError(config, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_perform_write_register_not_connected(config, monkeypatch):
-    """Test _perform_write_register raises ModbusException if client is not connected."""
+    """Test _perform_write_register raises NeoPoolConnectionError if client is not connected.
+
+    Regression: the inner pre-bump and the outer NeoPoolError handler used
+    to both increment _failed_writes for the same address, double-counting
+    a single failed operation in diagnostics.
+    """
     client = neopool_modbus.NeoPoolModbusClient(config)
     fake_modbus = AsyncMock()
     fake_modbus.connected = False
     monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
-    with pytest.raises(ModbusException):
+    with pytest.raises(NeoPoolConnectionError):
         await client._perform_write_register(0x0100, 123)
+    assert client._failed_writes.get("0x0100") == 1
 
 
 @pytest.mark.asyncio
 async def test_perform_write_register_exception(config, monkeypatch):
-    """Test _perform_write_register raises ModbusException on write exception."""
+    """Test _perform_write_register raises NeoPoolModbusError on write exception."""
     client = neopool_modbus.NeoPoolModbusClient(config)
     fake_modbus = AsyncMock()
     fake_modbus.connected = True
     fake_modbus.write_registers = AsyncMock(side_effect=Exception("modbus write fail"))
     monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
-    with pytest.raises(ModbusException):
+    with pytest.raises(NeoPoolModbusError):
         await client._perform_write_register(0x0100, 123)
+
+
+@pytest.mark.asyncio
+async def test_perform_write_register_timeout(config, monkeypatch):
+    """A TimeoutError from pymodbus during write_registers must surface as
+    NeoPoolTimeoutError, not NeoPoolModbusError."""
+    client = neopool_modbus.NeoPoolModbusClient(config)
+    fake_modbus = AsyncMock()
+    fake_modbus.connected = True
+    fake_modbus.write_registers = AsyncMock(side_effect=TimeoutError("write t/o"))
+    monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
+    with pytest.raises(NeoPoolTimeoutError):
+        await client._perform_write_register(0x0100, 123)
+    assert client._failed_writes.get("0x0100", 0) == 1
 
 
 @pytest.mark.asyncio
@@ -985,14 +1045,14 @@ async def test_perform_write_register_apply(config, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_perform_write_register_logs_exception(config, monkeypatch):
-    """A get_client() failure surfaces as a ModbusException whose message
+    """A get_client() failure surfaces as a NeoPoolModbusError whose message
     quotes the underlying error, so the caller (typically the coordinator
     in Home Assistant) can include it in its own UpdateFailed log entry.
 
     The docstring of the predecessor of this test mentioned "logs", but
     `_perform_write_register` does not call `_LOGGER.error()` itself on
     the catch-all exception path — it relies on the wrapping
-    ModbusException carrying the original message via `from e` so the
+    NeoPoolModbusError carrying the original message via `from e` so the
     caller can log once. This test therefore asserts the message rather
     than caplog state.
     """
@@ -1001,7 +1061,7 @@ async def test_perform_write_register_logs_exception(config, monkeypatch):
         client, "get_client", AsyncMock(side_effect=Exception("simulated error"))
     )
 
-    with pytest.raises(ModbusException, match="simulated error"):
+    with pytest.raises(NeoPoolModbusError, match="simulated error"):
         await client._perform_write_register(0x0100, 123)
 
     # The address was bumped in the failed-writes counter for diagnostics.
@@ -1257,7 +1317,12 @@ async def test_async_write_aux_relay_on_and_off(config, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_async_write_aux_relay_not_connected(config, monkeypatch):
-    """Test async_write_aux_relay raises ModbusException if client is not connected."""
+    """Test async_write_aux_relay raises NeoPoolConnectionError if client is not connected.
+
+    Regression: the inner pre-bump and the outer NeoPoolError handler used
+    to both increment _failed_writes for the same address, double-counting
+    a single failed operation in diagnostics.
+    """
 
     client = neopool_modbus.NeoPoolModbusClient(config)
     fake_modbus = AsyncMock()
@@ -1265,8 +1330,9 @@ async def test_async_write_aux_relay_not_connected(config, monkeypatch):
 
     monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
 
-    with pytest.raises(ModbusException):
+    with pytest.raises(NeoPoolConnectionError):
         await client.async_write_aux_relay(1, True)
+    assert client._failed_writes.get("0x010E") == 1
 
 
 @pytest.mark.asyncio
@@ -1285,13 +1351,13 @@ async def test_async_write_aux_relay_read_error(config, monkeypatch):
     fake_modbus.read_input_registers = AsyncMock(return_value=DummyResp())
     monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
 
-    with pytest.raises(ModbusException):
+    with pytest.raises(NeoPoolModbusError):
         await client.async_write_aux_relay(1, True)
 
 
 @pytest.mark.asyncio
 async def test_async_write_aux_relay_write_exception(config, monkeypatch):
-    """Test async_write_aux_relay raises ModbusException if write_registers throws exception."""
+    """Test async_write_aux_relay raises NeoPoolModbusError if write_registers throws exception."""
 
     client = neopool_modbus.NeoPoolModbusClient(config)
     fake_modbus = AsyncMock()
@@ -1308,8 +1374,32 @@ async def test_async_write_aux_relay_write_exception(config, monkeypatch):
     fake_modbus.write_registers = AsyncMock(side_effect=Exception("write fail"))
     monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
 
-    with pytest.raises(ModbusException):
+    with pytest.raises(NeoPoolModbusError):
         await client.async_write_aux_relay(1, True)
+
+
+@pytest.mark.asyncio
+async def test_async_write_aux_relay_timeout(config, monkeypatch):
+    """A TimeoutError raised by pymodbus during one of the AUX relay writes
+    must surface as NeoPoolTimeoutError, not NeoPoolModbusError."""
+
+    client = neopool_modbus.NeoPoolModbusClient(config)
+    fake_modbus = AsyncMock()
+    fake_modbus.connected = True
+
+    class DummyResp:
+        def __init__(self, regs):
+            self.registers = regs
+            self.isError = lambda: False
+
+    # Read of current relay state succeeds, then write_registers times out
+    fake_modbus.read_input_registers = AsyncMock(return_value=DummyResp([0]))
+    fake_modbus.write_registers = AsyncMock(side_effect=TimeoutError("aux t/o"))
+    monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
+
+    with pytest.raises(NeoPoolTimeoutError):
+        await client.async_write_aux_relay(1, True)
+    assert client._failed_writes.get("0x010E", 0) == 1
 
 
 @pytest.mark.asyncio
@@ -1325,7 +1415,7 @@ async def test_async_write_aux_relay_write_exception(config, monkeypatch):
 async def test_async_write_aux_relay_write_iserror(
     config, monkeypatch, failing_call, expected_msg_fragment
 ):
-    """Each of the four AUX relay writes must escalate isError() into a ModbusException.
+    """Each of the four AUX relay writes must escalate isError() into a NeoPoolModbusError.
 
     Sugar Valley devices can return a Modbus exception response from write_registers
     while pymodbus surfaces it as a successful Python call (no raise). The client
@@ -1354,7 +1444,7 @@ async def test_async_write_aux_relay_write_iserror(
     fake_modbus.write_registers = AsyncMock(side_effect=write_registers_side_effect)
     monkeypatch.setattr(client, "get_client", AsyncMock(return_value=fake_modbus))
 
-    with pytest.raises(ModbusException) as excinfo:
+    with pytest.raises(NeoPoolModbusError) as excinfo:
         await client.async_write_aux_relay(1, True)
 
     assert expected_msg_fragment in str(excinfo.value)
@@ -1366,7 +1456,7 @@ async def test_async_write_aux_relay_write_iserror(
 async def test_get_client_respects_backoff(config):
     c = neopool_modbus.NeoPoolModbusClient(config)
     c._backoff_until = datetime.now() + timedelta(seconds=5)
-    with pytest.raises(neopool_modbus.ConnectionException):
+    with pytest.raises(NeoPoolConnectionError):
         await c.get_client()
 
 

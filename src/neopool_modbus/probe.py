@@ -19,8 +19,9 @@ and tear it down again.  They are designed for situations like Home
 Assistant config-flow user-input validation where ``NeoPoolModbusClient``
 with its retry/backoff state machine would be overkill.
 
-All probes raise :class:`NeoPoolError` on transport / protocol failure so
-callers do not need to import :mod:`pymodbus` to handle errors.
+All probes raise the public :class:`NeoPoolError` hierarchy on
+transport / protocol failure so callers do not need to import
+:mod:`pymodbus` to handle errors.
 """
 
 from __future__ import annotations
@@ -33,7 +34,11 @@ from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.framer import FramerType
 
 from .decoders import modbus_regs_to_hex_string
-from .exceptions import NeoPoolError
+from .exceptions import (
+    NeoPoolConnectionError,
+    NeoPoolModbusError,
+    NeoPoolTimeoutError,
+)
 
 _LOGGER = logging.getLogger("neopool_modbus")
 
@@ -81,10 +86,14 @@ async def async_probe_serial(
 
     Raises:
         ValueError: ``framer`` is not ``"tcp"`` or ``"rtu"``.
-        NeoPoolError: Connect failed, read failed, the device returned a
-            Modbus exception response, or the registers could not be
-            parsed into a serial string. The original pymodbus / asyncio
-            exception (if any) is preserved as ``__cause__``.
+        NeoPoolTimeoutError: Connect or read timed out.
+        NeoPoolConnectionError: TCP connect was refused or returned False.
+        NeoPoolModbusError: The device returned a Modbus exception
+            response (``isError()`` true), an unexpected pymodbus
+            exception during the read, or registers that did not
+            decode into a usable serial string. The original
+            pymodbus / asyncio exception (if any) is preserved as
+            ``__cause__``.
     """
     framer_type = _resolve_framer(framer)
     client = AsyncModbusTcpClient(host, port=port, timeout=timeout, framer=framer_type)
@@ -94,16 +103,18 @@ async def async_probe_serial(
         except asyncio.CancelledError:
             raise
         except TimeoutError as exc:
-            raise NeoPoolError(
+            raise NeoPoolTimeoutError(
                 f"Probe connect to {host}:{port} timed out after {timeout}s"
             ) from exc
         except Exception as exc:
-            raise NeoPoolError(
+            raise NeoPoolConnectionError(
                 f"Probe connect failed for {host}:{port}: {exc}"
             ) from exc
 
         if not connected:
-            raise NeoPoolError(f"Probe connect returned False for {host}:{port}")
+            raise NeoPoolConnectionError(
+                f"Probe connect returned False for {host}:{port}"
+            )
 
         try:
             rr = await asyncio.wait_for(
@@ -117,20 +128,22 @@ async def async_probe_serial(
         except asyncio.CancelledError:
             raise
         except TimeoutError as exc:
-            raise NeoPoolError(
+            raise NeoPoolTimeoutError(
                 f"Probe read from {host}:{port} timed out after {timeout}s"
             ) from exc
         except Exception as exc:
-            raise NeoPoolError(f"Probe read failed for {host}:{port}: {exc}") from exc
+            raise NeoPoolModbusError(
+                f"Probe read failed for {host}:{port}: {exc}"
+            ) from exc
 
         if rr.isError():
-            raise NeoPoolError(
+            raise NeoPoolModbusError(
                 f"Probe read returned Modbus error from {host}:{port}: {rr}"
             )
 
         serial = modbus_regs_to_hex_string(list(rr.registers))
         if not serial:
-            raise NeoPoolError(
+            raise NeoPoolModbusError(
                 f"Probe read for {host}:{port} returned no usable serial bytes"
             )
         _LOGGER.debug("Probe read serial %s from %s:%s", serial, host, port)

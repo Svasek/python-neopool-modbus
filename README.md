@@ -70,7 +70,9 @@ from neopool_modbus import (
     NeoPoolModbusClient,
     NeoPoolError,
     NeoPoolConnectionError,
+    NeoPoolModbusError,
     NeoPoolTimeoutError,
+    async_probe_serial,
 )
 from neopool_modbus.registers import (
     EXEC_REGISTER,
@@ -100,10 +102,36 @@ from neopool_modbus.status_mask import (
 )
 ```
 
-The exception hierarchy (`NeoPoolError` → `NeoPoolConnectionError` /
-`NeoPoolTimeoutError`) is a forward-compatible contract; today the client
-still raises the underlying `pymodbus` exceptions directly. Catching
-`Exception` is the only safe choice for now.
+All client methods translate underlying pymodbus exceptions into the
+`NeoPoolError` hierarchy at the library boundary, so callers never need
+to import `pymodbus` to catch errors:
+
+| Class                    | Raised when                                                                      |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `NeoPoolConnectionError` | TCP connect fails, returned `False`, or the client is in its post-failure backoff |
+| `NeoPoolTimeoutError`    | Connect, read, or write times out (`asyncio.TimeoutError`)                       |
+| `NeoPoolModbusError`     | A read returns a Modbus exception response (`isError()` true), or `async_write_aux_relay` / one of the timer write follow-ups returns `isError()` |
+| `NeoPoolError`           | Common base; catch this to handle any of the above                                |
+
+> ⚠️ `NeoPoolModbusClient.async_write_register()` is the exception to the
+> table above: it returns `None` (rather than raising) on `isError()` so
+> existing callers in the Home Assistant integration keep working. A
+> future major release will tighten this to raise `NeoPoolModbusError`
+> for consistency.
+
+```python
+from neopool_modbus import NeoPoolError, NeoPoolModbusClient
+
+client = NeoPoolModbusClient({"host": "192.168.1.42"})
+try:
+    data = await client.async_read_all()
+except NeoPoolError as exc:
+    # exc.__cause__ is the original pymodbus / asyncio exception, if any.
+    print(f"NeoPool read failed: {exc}")
+```
+
+`ValueError` is still raised directly for programmer errors such as an
+out-of-range AUX relay index — those are not transport failures.
 
 ## Features
 

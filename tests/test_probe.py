@@ -18,7 +18,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from neopool_modbus import async_probe_serial
-from neopool_modbus.exceptions import NeoPoolError
+from neopool_modbus.exceptions import (
+    NeoPoolConnectionError,
+    NeoPoolModbusError,
+    NeoPoolTimeoutError,
+)
 from neopool_modbus.probe import _resolve_framer
 
 
@@ -85,7 +89,7 @@ async def test_async_probe_serial_connect_returns_false():
     fake_client = _make_client(connect_result=False)
     with (
         patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client),
-        pytest.raises(NeoPoolError, match="returned False"),
+        pytest.raises(NeoPoolConnectionError, match="returned False"),
     ):
         await async_probe_serial("192.0.2.10")
 
@@ -96,7 +100,7 @@ async def test_async_probe_serial_connect_timeout():
     fake_client.connect = AsyncMock(side_effect=TimeoutError("connect t/o"))
     with (
         patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client),
-        pytest.raises(NeoPoolError, match=r"connect to .* timed out after"),
+        pytest.raises(NeoPoolTimeoutError, match=r"connect to .* timed out after"),
     ):
         await async_probe_serial("192.0.2.10")
 
@@ -107,7 +111,7 @@ async def test_async_probe_serial_connect_refused():
     fake_client.connect = AsyncMock(side_effect=ConnectionRefusedError("refused"))
     with (
         patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client),
-        pytest.raises(NeoPoolError, match="connect failed"),
+        pytest.raises(NeoPoolConnectionError, match="connect failed"),
     ):
         await async_probe_serial("192.0.2.10")
 
@@ -118,7 +122,7 @@ async def test_async_probe_serial_read_timeout():
     fake_client.read_holding_registers = AsyncMock(side_effect=TimeoutError("read t/o"))
     with (
         patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client),
-        pytest.raises(NeoPoolError, match=r"read from .* timed out after"),
+        pytest.raises(NeoPoolTimeoutError, match=r"read from .* timed out after"),
     ):
         await async_probe_serial("192.0.2.10")
 
@@ -129,7 +133,7 @@ async def test_async_probe_serial_read_other_exception():
     fake_client.read_holding_registers = AsyncMock(side_effect=RuntimeError("boom"))
     with (
         patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client),
-        pytest.raises(NeoPoolError, match="read failed"),
+        pytest.raises(NeoPoolModbusError, match="read failed"),
     ):
         await async_probe_serial("192.0.2.10")
 
@@ -142,7 +146,7 @@ async def test_async_probe_serial_read_iserror():
     )
     with (
         patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client),
-        pytest.raises(NeoPoolError, match="Modbus error"),
+        pytest.raises(NeoPoolModbusError, match="Modbus error"),
     ):
         await async_probe_serial("192.0.2.10")
 
@@ -159,7 +163,7 @@ async def test_async_probe_serial_empty_serial():
     with (
         patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client),
         patch("neopool_modbus.probe.modbus_regs_to_hex_string", return_value=""),
-        pytest.raises(NeoPoolError, match="no usable serial"),
+        pytest.raises(NeoPoolModbusError, match="no usable serial"),
     ):
         await async_probe_serial("192.0.2.10")
 

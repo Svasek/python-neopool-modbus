@@ -23,7 +23,6 @@ from datetime import datetime, timedelta
 from typing import Any, overload
 
 from pymodbus.client import AsyncModbusTcpClient
-from pymodbus.exceptions import ConnectionException, ModbusException
 from pymodbus.framer import FramerType
 
 from .decoders import (
@@ -31,6 +30,12 @@ from .decoders import (
     get_filtration_speed,
     modbus_regs_to_ascii,
     parse_timer_block,
+)
+from .exceptions import (
+    NeoPoolConnectionError,
+    NeoPoolError,
+    NeoPoolModbusError,
+    NeoPoolTimeoutError,
 )
 from .registers import (
     COMMAND_REGISTERS,
@@ -132,7 +137,7 @@ class NeoPoolModbusClient:
             # Check if we're in backoff period
             if self._backoff_until and datetime.now() < self._backoff_until:
                 remaining = (self._backoff_until - datetime.now()).total_seconds()
-                raise ConnectionException(
+                raise NeoPoolConnectionError(
                     f"Connection in backoff for {remaining:.1f} seconds"
                 )
 
@@ -177,7 +182,7 @@ class NeoPoolModbusClient:
                 connected = await asyncio.wait_for(self._client.connect(), timeout=10)
 
                 if not connected:
-                    raise ConnectionException("Connection returned False")
+                    raise NeoPoolConnectionError("Connection returned False")
 
                 # Connection successful!
                 self._connection_attempts = 0
@@ -221,9 +226,13 @@ class NeoPoolModbusClient:
             "All %d connection attempts failed. Setting 2-minute backoff period.",
             self._max_connection_retries,
         )
-        raise ConnectionException(
+        if isinstance(last_error, TimeoutError):
+            raise NeoPoolTimeoutError(
+                f"Failed to establish connection after {self._max_connection_retries} attempts: {last_error}"
+            ) from last_error
+        raise NeoPoolConnectionError(
             f"Failed to establish connection after {self._max_connection_retries} attempts: {last_error}"
-        )
+        ) from last_error
 
     def _install_fc20_filter(self, client: AsyncModbusTcpClient) -> None:
         """Install a filter on the pymodbus transport to discard Sugar Valley FC20
@@ -452,16 +461,25 @@ class NeoPoolModbusClient:
             await asyncio.sleep(0.05)
             try:
                 rr = await read_func(address=address, count=count, device_id=self._unit)
+            except TimeoutError as e:
+                self._failed_reads[f"0x{address:04X}"] = (
+                    self._failed_reads.get(f"0x{address:04X}", 0) + 1
+                )
+                raise NeoPoolTimeoutError(
+                    f"Read timed out at 0x{address:04X}: {e}"
+                ) from e
             except Exception as e:
                 self._failed_reads[f"0x{address:04X}"] = (
                     self._failed_reads.get(f"0x{address:04X}", 0) + 1
                 )
-                raise ModbusException(f"Read error at 0x{address:04X}: {e}") from e
+                raise NeoPoolModbusError(f"Read error at 0x{address:04X}: {e}") from e
             if rr.isError():
                 self._failed_reads[f"0x{address:04X}"] = (
                     self._failed_reads.get(f"0x{address:04X}", 0) + 1
                 )
-                raise ModbusException(f"Modbus read error from 0x{address:04X}: {rr}")
+                raise NeoPoolModbusError(
+                    f"Modbus read error from 0x{address:04X}: {rr}"
+                )
             self._successful_addresses.append((f"0x{address:04X}", time.time()))
             registers.extend(rr.registers)
             _log_prefix = f"Raw {label} from" if label else "Raw registers from"
@@ -510,7 +528,7 @@ class NeoPoolModbusClient:
                 self._failed_reads["connection"] = (
                     self._failed_reads.get("connection", 0) + 1
                 )
-                raise ModbusException(
+                raise NeoPoolConnectionError(
                     f"Modbus client connection failed to {self._host}:{self._port}"
                 )
 
@@ -916,9 +934,16 @@ class NeoPoolModbusClient:
                         "Could not clear MBF_NOTIFICATION (0x%04X)", notification
                     )
 
+        except NeoPoolError:
+            # Inner per-address counters in _read_register_ranges have already
+            # been bumped; do not double-count under "unknown" here.
+            raise
+        except TimeoutError as e:  # pragma: no cover
+            self._failed_reads["unknown"] = self._failed_reads.get("unknown", 0) + 1
+            raise NeoPoolTimeoutError(f"Modbus TCP read timed out: {e}") from e
         except Exception as e:  # pragma: no cover
             self._failed_reads["unknown"] = self._failed_reads.get("unknown", 0) + 1
-            raise ModbusException(f"Modbus TCP read error: {e}") from e
+            raise NeoPoolModbusError(f"Modbus TCP read error: {e}") from e
         finally:
             end = time.monotonic()
             self._response_times.append(end - start)
@@ -1013,10 +1038,7 @@ class NeoPoolModbusClient:
         try:
             client = await self.get_client()
             if client is None or not client.connected:
-                self._failed_writes[f"0x{address:04X}"] = (
-                    self._failed_writes.get(f"0x{address:04X}", 0) + 1
-                )
-                raise ModbusException(
+                raise NeoPoolConnectionError(
                     f"Modbus client connection failed to {self._host}:{self._port}"
                 )
 
@@ -1097,11 +1119,23 @@ class NeoPoolModbusClient:
                 ),
             }
 
+        except NeoPoolError:
+            self._failed_writes[f"0x{address:04X}"] = (
+                self._failed_writes.get(f"0x{address:04X}", 0) + 1
+            )
+            raise
+        except TimeoutError as e:
+            self._failed_writes[f"0x{address:04X}"] = (
+                self._failed_writes.get(f"0x{address:04X}", 0) + 1
+            )
+            raise NeoPoolTimeoutError(
+                f"Modbus TCP write timed out at 0x{address:04X}: {e}"
+            ) from e
         except Exception as e:
             self._failed_writes[f"0x{address:04X}"] = (
                 self._failed_writes.get(f"0x{address:04X}", 0) + 1
             )
-            raise ModbusException(
+            raise NeoPoolModbusError(
                 f"Modbus TCP write exception at 0x{address:04X}: {e}"
             ) from e
         finally:
@@ -1114,11 +1148,12 @@ class NeoPoolModbusClient:
         """Write state of an AUX relay (1-4) using function 0x10 (Write Multiple Registers).
 
         Returns ``None`` on success. Raises :exc:`ValueError` if *relay_index*
-        is outside the supported range (1-4). Raises :exc:`ModbusException`
-        on any connection, read, or write error; the four follow-up writes
-        (relay enable, relay value, 0x0289 commit trigger, EXEC_REGISTER)
-        each validate ``isError()`` so a silent device-side rejection cannot
-        be reported as success.
+        is outside the supported range (1-4). Raises :exc:`NeoPoolError`
+        (specifically :exc:`NeoPoolConnectionError`, :exc:`NeoPoolTimeoutError`,
+        or :exc:`NeoPoolModbusError`) on any connection, read, or write error;
+        the four follow-up writes (relay enable, relay value, 0x0289 commit
+        trigger, EXEC_REGISTER) each validate ``isError()`` so a silent
+        device-side rejection cannot be reported as success.
         """
         if relay_index not in AUX_BITMASKS:
             raise ValueError(f"Invalid AUX relay index: {relay_index} (expected 1-4)")
@@ -1129,10 +1164,7 @@ class NeoPoolModbusClient:
         try:
             client = await self.get_client()
             if client is None or not client.connected:
-                self._failed_writes[f"0x{addr:04X}"] = (
-                    self._failed_writes.get(f"0x{addr:04X}", 0) + 1
-                )
-                raise ModbusException(
+                raise NeoPoolConnectionError(
                     f"Modbus client connection failed to {self._host}:{self._port}"
                 )
             # Read current relay state
@@ -1140,7 +1172,7 @@ class NeoPoolModbusClient:
                 address=addr, count=1, device_id=self._unit
             )
             if current_result.isError():
-                raise ModbusException(
+                raise NeoPoolModbusError(
                     f"Modbus read error from 0x{addr:04X}: {current_result}"
                 )
             current = current_result.registers[0]
@@ -1150,14 +1182,14 @@ class NeoPoolModbusClient:
                 address=addr, values=[1], device_id=self._unit
             )
             if result.isError():
-                raise ModbusException(
+                raise NeoPoolModbusError(
                     f"Modbus write error at 0x{addr:04X} (relay enable): {result}"
                 )
             result = await client.write_registers(
                 address=addr, values=[value], device_id=self._unit
             )
             if result.isError():
-                raise ModbusException(
+                raise NeoPoolModbusError(
                     f"Modbus write error at 0x{addr:04X} (relay value): {result}"
                 )
             _LOGGER.debug("Wrote relay state at 0x%04X: 0x%04X", addr, value)
@@ -1165,24 +1197,36 @@ class NeoPoolModbusClient:
                 address=0x0289, values=[0], device_id=self._unit
             )
             if result.isError():
-                raise ModbusException(
+                raise NeoPoolModbusError(
                     f"Modbus write error at 0x0289 (commit trigger): {result}"
                 )
             result = await client.write_registers(
                 address=EXEC_REGISTER, values=[1], device_id=self._unit
             )
             if result.isError():
-                raise ModbusException(
+                raise NeoPoolModbusError(
                     f"Modbus write error at 0x{EXEC_REGISTER:04X} (EXEC): {result}"
                 )
             self._successful_write_ops += 1
             self._successful_writes.append((f"0x{addr:04X}", time.time()))
 
+        except NeoPoolError:
+            self._failed_writes[f"0x{addr:04X}"] = (
+                self._failed_writes.get(f"0x{addr:04X}", 0) + 1
+            )
+            raise
+        except TimeoutError as e:
+            self._failed_writes[f"0x{addr:04X}"] = (
+                self._failed_writes.get(f"0x{addr:04X}", 0) + 1
+            )
+            raise NeoPoolTimeoutError(
+                f"Modbus TCP AUX relay write timed out at 0x{addr:04X}: {e}"
+            ) from e
         except Exception as e:
             self._failed_writes[f"0x{addr:04X}"] = (
                 self._failed_writes.get(f"0x{addr:04X}", 0) + 1
             )
-            raise ModbusException(
+            raise NeoPoolModbusError(
                 f"Modbus TCP AUX relay write failed at 0x{addr:04X}: {e}"
             ) from e
         finally:
@@ -1250,7 +1294,7 @@ class NeoPoolModbusClient:
             self._failed_reads["timers_connection"] = (
                 self._failed_reads.get("timers_connection", 0) + 1
             )
-            raise ModbusException(
+            raise NeoPoolConnectionError(
                 f"Modbus client connection failed to {self._host}:{self._port}"
             )
         for name, addr in TIMER_BLOCKS.items():
