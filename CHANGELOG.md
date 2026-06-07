@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0](https://github.com/Svasek/python-neopool-modbus/compare/v1.1.0...v2.0.0) (2026-06-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* callers that caught pymodbus.ConnectionException / pymodbus.ModbusException must catch NeoPoolError (or a subclass) instead.
+
+### ✨ Features
+
+* 💥 raise NeoPool*Error subclasses on every failure path ([#3](https://github.com/Svasek/python-neopool-modbus/issues/3)) ([f026d69](https://github.com/Svasek/python-neopool-modbus/commit/f026d69efc814e3f1ed560325f5a81dacba6ca84))
+
 ## [1.1.0](https://github.com/Svasek/python-neopool-modbus/compare/v1.0.0...v1.1.0) (2026-06-06)
 
 
