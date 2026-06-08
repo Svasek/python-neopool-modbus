@@ -21,7 +21,7 @@ brands VistaPool, Hidrolife, Aquascenic, Oxilife, Hayward, Brilix, Bayrol)
 connected via **Modbus TCP**.
 
 This library is the communication layer extracted from the
-[Home Assistant `neopool` integration](https://github.com/svasek/homeassistant-vistapool-modbus)
+[Home Assistant `neopool` integration](https://github.com/svasek/homeassistant-neopool-modbus)
 and is suitable for any async Python project — Home Assistant integrations,
 scripts, dashboards, or custom automation.
 
@@ -157,6 +157,18 @@ logging.getLogger("neopool_modbus").setLevel(logging.DEBUG)
 Home Assistant users can flip the integration's "Enable debug logging" toggle
 in the UI; the integration's `manifest.json` lists `neopool_modbus` so the
 toggle covers the library too.
+
+## Based On
+
+- [Tasmota NeoPool driver](https://github.com/arendst/Tasmota/blob/master/tasmota/tasmota_xsns_sensor/xsns_83_neopool.ino) — implements the NeoPool Modbus register protocol originally documented by Sugar Valley
+- _NeoPool Control System MODBUS Register description_ — a Markdown transcription of the official Modbus register documentation by Sugar Valley (see [`docs/modbus-registers.md`](docs/modbus-registers.md))
+
+## Disclaimer
+
+This library is provided "AS IS" and without any warranty or guarantee of any kind.
+The author takes no responsibility for any damage, loss, or malfunction resulting from the use or misuse of this code. Use at your own risk.
+
+_This project is not affiliated with or endorsed by Sugar Valley, Hayward, or any other pool equipment manufacturer or distributor._
 
 ## License
 
