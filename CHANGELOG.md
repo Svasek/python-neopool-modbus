@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1](https://github.com/svasek/python-neopool-modbus/compare/v2.0.0...v2.0.1) (2026-06-10)
+
+
+### 🐛 Bug Fixes
+
+* **client:** 🐛 suppress verification warning for MBF_ACTION_COPY_TO_RTC ([#9](https://github.com/svasek/python-neopool-modbus/issues/9)) ([a0c16e9](https://github.com/svasek/python-neopool-modbus/commit/a0c16e97c282cd846aaa1d5982a056210a32b9f7))
+
+
+### ♻️ Refactoring
+
+* ♻️ adopt mypy strict alongside basedpyright ([#11](https://github.com/svasek/python-neopool-modbus/issues/11)) ([21e6f41](https://github.com/svasek/python-neopool-modbus/commit/21e6f41437a52a2bd22d97156d6c02a45aa2f025))
+
 ## [2.0.0](https://github.com/Svasek/python-neopool-modbus/compare/v1.1.0...v2.0.0) (2026-06-07)
 
 
