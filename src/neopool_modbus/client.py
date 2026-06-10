@@ -19,7 +19,7 @@ import logging
 import time
 from collections import deque
 from collections.abc import Callable, Mapping
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, overload
 
 from pymodbus.client import AsyncModbusTcpClient
@@ -78,6 +78,12 @@ _FULL_READ_INTERVAL = 60
 
 class NeoPoolModbusClient:
     def __init__(self, config: Mapping[str, Any]) -> None:
+        """Initialise the client from a config mapping.
+
+        ``config`` must contain ``host``; ``port`` (default 502),
+        ``slave_id`` (default 1) and ``modbus_framer`` (default ``tcp``)
+        are optional.
+        """
         self._host: str = config["host"]
         self._port = config.get("port", 502)
         self._unit = config.get("slave_id", 1)
@@ -135,8 +141,8 @@ class NeoPoolModbusClient:
         """Get or create a Modbus client with retry logic."""
         async with self._client_lock:
             # Check if we're in backoff period
-            if self._backoff_until and datetime.now() < self._backoff_until:
-                remaining = (self._backoff_until - datetime.now()).total_seconds()
+            if self._backoff_until and datetime.now(tz=UTC) < self._backoff_until:
+                remaining = (self._backoff_until - datetime.now(tz=UTC)).total_seconds()
                 raise NeoPoolConnectionError(
                     f"Connection in backoff for {remaining:.1f} seconds"
                 )
@@ -182,12 +188,12 @@ class NeoPoolModbusClient:
                 connected = await asyncio.wait_for(self._client.connect(), timeout=10)
 
                 if not connected:
-                    raise NeoPoolConnectionError("Connection returned False")
+                    raise NeoPoolConnectionError("Connection returned False")  # noqa: TRY301  # raised here so the outer except handles backoff/retry uniformly
 
                 # Connection successful!
                 self._connection_attempts = 0
                 self._consecutive_errors = 0
-                self._last_successful_operation = datetime.now()
+                self._last_successful_operation = datetime.now(tz=UTC)
                 self._backoff_until = None
 
                 self._install_fc20_filter(self._client)
@@ -197,9 +203,9 @@ class NeoPoolModbusClient:
                     self._host,
                     self._port,
                 )
-                return self._client
+                return self._client  # noqa: TRY300  # the surrounding except retries on any failure; an else: block would split the happy path awkwardly
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # connection retry must catch any failure (pymodbus internal, OSError, attribute errors on partial connect) to back off and retry uniformly
                 last_error = e
                 self._connection_attempts += 1
 
@@ -220,7 +226,7 @@ class NeoPoolModbusClient:
                     continue
 
         # All connection attempts failed - set backoff period
-        self._backoff_until = datetime.now() + timedelta(minutes=2)
+        self._backoff_until = datetime.now(tz=UTC) + timedelta(minutes=2)
 
         _LOGGER.error(
             "All %d connection attempts failed. Setting 2-minute backoff period.",
@@ -235,8 +241,9 @@ class NeoPoolModbusClient:
         ) from last_error
 
     def _install_fc20_filter(self, client: AsyncModbusTcpClient) -> None:
-        """Install a filter on the pymodbus transport to discard Sugar Valley FC20
-        broadcast frames before pymodbus processes them.
+        """Install a transport filter that drops Sugar Valley FC20 broadcasts.
+
+        Drops FC20 (0x20) broadcast frames before pymodbus processes them.
 
         Sugar Valley devices spontaneously broadcast proprietary FC20 (0x20) frames
         on the RS485 bus approximately every 2 seconds. Gateways like the Elfin EW11
@@ -333,7 +340,7 @@ class NeoPoolModbusClient:
                 self._framer,
             )
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  # filter install is best-effort; any failure (pymodbus internals, AttributeError, etc.) must not block the connection
             _LOGGER.debug("Could not install FC20 filter: %s", exc)
 
     async def _is_connection_healthy(self) -> bool:
@@ -342,10 +349,9 @@ class NeoPoolModbusClient:
             return False  # pragma: no cover
 
         # If we had a recent successful operation, assume connection is healthy
-        if (
-            self._last_successful_operation
-            and datetime.now() - self._last_successful_operation < timedelta(minutes=2)
-        ):
+        if self._last_successful_operation and datetime.now(
+            tz=UTC
+        ) - self._last_successful_operation < timedelta(minutes=2):
             return True
 
         # Perform a lightweight health check
@@ -359,11 +365,11 @@ class NeoPoolModbusClient:
 
             is_healthy = not result.isError()
             if is_healthy:
-                self._last_successful_operation = datetime.now()
+                self._last_successful_operation = datetime.now(tz=UTC)
 
-            return is_healthy
+            return is_healthy  # noqa: TRY300  # restructuring as else: would split state-update + return awkwardly
 
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  # noqa: BLE001  # pragma: no cover  # health check must report False on any failure (pymodbus, asyncio, OSError)
             _LOGGER.debug("Connection health check failed: %s", e)
             return False
 
@@ -377,7 +383,7 @@ class NeoPoolModbusClient:
                     if result is not None and asyncio.iscoroutine(result):
                         await asyncio.wait_for(result, timeout=5)
                 _LOGGER.debug("Modbus client closed successfully")
-            except Exception as e:  # pragma: no cover
+            except Exception as e:  # noqa: BLE001  # pragma: no cover  # close is best-effort cleanup; never let any failure mask the original error
                 _LOGGER.debug("Error closing Modbus client: %s", e)
             finally:
                 self._client = None
@@ -408,11 +414,11 @@ class NeoPoolModbusClient:
                 result = await self._perform_read_all()
                 # Success
                 self._successful_operations += 1
-                self._last_successful_operation = datetime.now()
+                self._last_successful_operation = datetime.now(tz=UTC)
                 self._consecutive_errors = 0
-                return result
+                return result  # noqa: TRY300  # state-update + return belong inside the try; an else: would split them
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # retry must catch any read-path failure (NeoPoolError, OSError, asyncio, pymodbus); the last error is re-raised below
                 last_error = e
                 self._consecutive_errors += 1
 
@@ -528,7 +534,7 @@ class NeoPoolModbusClient:
                 self._failed_reads["connection"] = (
                     self._failed_reads.get("connection", 0) + 1
                 )
-                raise NeoPoolConnectionError(
+                raise NeoPoolConnectionError(  # noqa: TRY301  # raise inside try so the surrounding NeoPoolError handler bumps diagnostics uniformly
                     f"Modbus client connection failed to {self._host}:{self._port}"
                 )
 
@@ -929,7 +935,7 @@ class NeoPoolModbusClient:
                     _LOGGER.debug(
                         "MBF_NOTIFICATION register cleared (was 0x%04X)", notification
                     )
-                except Exception:
+                except Exception:  # noqa: BLE001  # clearing MBF_NOTIFICATION is opportunistic; any pymodbus/transport failure is logged-and-ignored
                     _LOGGER.debug(
                         "Could not clear MBF_NOTIFICATION (0x%04X)", notification
                     )
@@ -1009,8 +1015,8 @@ class NeoPoolModbusClient:
         """Write register with retry."""
         try:
             result = await self._perform_write_register(address, value, apply)
-            self._last_successful_operation = datetime.now()
-            return result
+            self._last_successful_operation = datetime.now(tz=UTC)
+            return result  # noqa: TRY300  # state-update + return belong inside the try; an else: would split them
         except Exception:
             self._consecutive_errors += 1
             async with self._client_lock:
@@ -1038,7 +1044,7 @@ class NeoPoolModbusClient:
         try:
             client = await self.get_client()
             if client is None or not client.connected:
-                raise NeoPoolConnectionError(
+                raise NeoPoolConnectionError(  # noqa: TRY301  # raise inside try so the surrounding handler bumps diagnostics + closes client uniformly
                     f"Modbus client connection failed to {self._host}:{self._port}"
                 )
 
@@ -1161,52 +1167,52 @@ class NeoPoolModbusClient:
         addr = 0x010E
         start = time.monotonic()
         self._total_writes += 1
+
+        def _check(result: Any, message: str) -> None:
+            """Raise NeoPoolModbusError if a Modbus result indicates an error."""
+            if result.isError():
+                raise NeoPoolModbusError(message)
+
         try:
             client = await self.get_client()
             if client is None or not client.connected:
-                raise NeoPoolConnectionError(
+                raise NeoPoolConnectionError(  # noqa: TRY301  # raise inside try so the surrounding handler bumps diagnostics uniformly
                     f"Modbus client connection failed to {self._host}:{self._port}"
                 )
             # Read current relay state
             current_result = await client.read_input_registers(
                 address=addr, count=1, device_id=self._unit
             )
-            if current_result.isError():
-                raise NeoPoolModbusError(
-                    f"Modbus read error from 0x{addr:04X}: {current_result}"
-                )
+            _check(
+                current_result, f"Modbus read error from 0x{addr:04X}: {current_result}"
+            )
             current = current_result.registers[0]
             # Set or clear the aux bit
             value = current | aux_bit if on else current & ~aux_bit
             result = await client.write_registers(
                 address=addr, values=[1], device_id=self._unit
             )
-            if result.isError():
-                raise NeoPoolModbusError(
-                    f"Modbus write error at 0x{addr:04X} (relay enable): {result}"
-                )
+            _check(
+                result, f"Modbus write error at 0x{addr:04X} (relay enable): {result}"
+            )
             result = await client.write_registers(
                 address=addr, values=[value], device_id=self._unit
             )
-            if result.isError():
-                raise NeoPoolModbusError(
-                    f"Modbus write error at 0x{addr:04X} (relay value): {result}"
-                )
+            _check(
+                result, f"Modbus write error at 0x{addr:04X} (relay value): {result}"
+            )
             _LOGGER.debug("Wrote relay state at 0x%04X: 0x%04X", addr, value)
             result = await client.write_registers(
                 address=0x0289, values=[0], device_id=self._unit
             )
-            if result.isError():
-                raise NeoPoolModbusError(
-                    f"Modbus write error at 0x0289 (commit trigger): {result}"
-                )
+            _check(result, f"Modbus write error at 0x0289 (commit trigger): {result}")
             result = await client.write_registers(
                 address=EXEC_REGISTER, values=[1], device_id=self._unit
             )
-            if result.isError():
-                raise NeoPoolModbusError(
-                    f"Modbus write error at 0x{EXEC_REGISTER:04X} (EXEC): {result}"
-                )
+            _check(
+                result,
+                f"Modbus write error at 0x{EXEC_REGISTER:04X} (EXEC): {result}",
+            )
             self._successful_write_ops += 1
             self._successful_writes.append((f"0x{addr:04X}", time.time()))
 
@@ -1241,8 +1247,8 @@ class NeoPoolModbusClient:
         """Read timers with retry."""
         try:
             result = await self._perform_read_all_timers(enabled_timers, force_read)
-            self._last_successful_operation = datetime.now()
-            return result
+            self._last_successful_operation = datetime.now(tz=UTC)
+            return result  # noqa: TRY300  # state-update + return belong inside the try; an else: would split them
         except Exception:
             self._consecutive_errors += 1
             async with self._client_lock:
@@ -1255,7 +1261,8 @@ class NeoPoolModbusClient:
         enabled_timers: list[str] | None = None,
         force_read: tuple[str, ...] | None = None,
     ) -> dict[str, Any]:
-        """Reads all timer blocks from the device.
+        """Read all timer blocks from the device.
+
         If enabled_timers is provided, only those timers will be read.
         If enabled_timers is None, all timers will be read.
         If force_read is provided, those timers bypass the notification cache
@@ -1308,7 +1315,7 @@ class NeoPoolModbusClient:
                 rr = await client.read_holding_registers(
                     address=addr, count=15, device_id=self._unit
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # per-timer read continues on any failure (pymodbus, OSError, asyncio); error is logged and the next timer is tried
                 self._failed_reads[f"0x{addr:04X}"] = (
                     self._failed_reads.get(f"0x{addr:04X}", 0) + 1
                 )
@@ -1334,8 +1341,8 @@ class NeoPoolModbusClient:
         """Write register with retry."""
         try:
             result = await self._perform_write_timer(block_name, timer_data)
-            self._last_successful_operation = datetime.now()
-            return result
+            self._last_successful_operation = datetime.now(tz=UTC)
+            return result  # noqa: TRY300  # state-update + return belong inside the try; an else: would split them
         except Exception:
             self._consecutive_errors += 1
             async with self._client_lock:
@@ -1346,10 +1353,11 @@ class NeoPoolModbusClient:
     async def _perform_write_timer(
         self, block_name: str, timer_data: dict[str, Any]
     ) -> bool:
-        """
-        Writes only requested fields to a timer block. Preserves all other fields.
-        Only update 'on' and 'interval' (and optionally other editable fields).
-        Other values (enable, period, function, ...) are preserved as read.
+        """Write only requested fields to a timer block.
+
+        Preserves all other fields. Only update 'on' and 'interval' (and
+        optionally other editable fields). Other values (enable, period,
+        function, ...) are preserved as read.
         """
         # `addr` is captured up front for the failed_writes counter inside the
         # try block; if `block_name` is unknown we raise before bumping any
@@ -1451,7 +1459,7 @@ class NeoPoolModbusClient:
 
             self._successful_write_ops += 1
             self._successful_writes.append((f"0x{addr:04X}", time.time()))
-            return True
+            return True  # noqa: TRY300  # state-update + return belong inside the try; an else: would split them
         except Exception as e:
             self._failed_writes[f"0x{addr:04X}"] = (
                 self._failed_writes.get(f"0x{addr:04X}", 0) + 1
@@ -1491,7 +1499,8 @@ class NeoPoolModbusClient:
                 else None
             ),
             "currently_in_backoff": (
-                self._backoff_until is not None and datetime.now() < self._backoff_until
+                self._backoff_until is not None
+                and datetime.now(tz=UTC) < self._backoff_until
             ),
             "backoff_until": (
                 self._backoff_until.isoformat() if self._backoff_until else None

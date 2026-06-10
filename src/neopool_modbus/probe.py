@@ -155,7 +155,7 @@ async def async_probe_serial(
                 await result
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001  # cleanup path: never let close() failures mask the read result
             _LOGGER.debug("Probe close raised; ignoring", exc_info=True)
 
 

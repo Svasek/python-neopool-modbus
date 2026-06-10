@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -55,7 +55,7 @@ async def test_close_resets_state_and_closes_client(config):
     client._client = mock_client
     client._connection_attempts = 42
     client._consecutive_errors = 7
-    client._backoff_until = datetime.now()
+    client._backoff_until = datetime.now(tz=UTC)
 
     await client.close()
 
@@ -226,7 +226,7 @@ async def test_is_connection_healthy_recent_success(config):
     client = neopool_modbus.NeoPoolModbusClient(config)
     client._client = AsyncMock()
     client._client.connected = True
-    client._last_successful_operation = datetime.now()
+    client._last_successful_operation = datetime.now(tz=UTC)
     assert await client._is_connection_healthy() is True
 
 
@@ -1455,7 +1455,7 @@ async def test_async_write_aux_relay_write_iserror(
 @pytest.mark.asyncio
 async def test_get_client_respects_backoff(config):
     c = neopool_modbus.NeoPoolModbusClient(config)
-    c._backoff_until = datetime.now() + timedelta(seconds=5)
+    c._backoff_until = datetime.now(tz=UTC) + timedelta(seconds=5)
     with pytest.raises(NeoPoolConnectionError):
         await c.get_client()
 
