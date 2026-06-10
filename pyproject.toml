@@ -78,8 +78,41 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
-ignore = ["E501"]
+select = [
+    # Default Python style / errors
+    "E", "F", "W", "I",
+    # Bugbear (likely bugs)
+    "B",
+    # Blind except
+    "BLE",
+    # Pyupgrade + simplify (kept from previous config)
+    "UP", "SIM",
+    # Selected pydocstyle rules - module / public-method / __init__ docstrings
+    # plus the "summary line + period" hygiene
+    "D102", "D107", "D205", "D415",
+    # Datetime: timezone-aware constructors
+    "DTZ",
+    # Logging format (% placeholders, not f-strings)
+    "G",
+    # Imports at top-level (not inside functions, save for genuine circulars)
+    "PLC0415",
+    # min/max collapse
+    "PLR1730",
+    # Drop redundant assignment-before-return
+    "RET504",
+    # Ruff-specific: ambiguous Unicode (EN DASH etc.), modern unpacking,
+    # int-cast on already-int, unused noqa hygiene
+    "RUF001", "RUF002", "RUF003", "RUF005", "RUF046", "RUF100",
+    # Try/except hygiene: chain causes, prefer else over duplicate paths
+    "B904", "TRY300", "TRY301",
+]
+ignore = [
+    # Long lines are formatter-managed; ruff format wraps where it can.
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["PLC0415", "D102", "D107", "D205", "D415"]
 
 [tool.codespell]
 skip = "*.json,CHANGELOG.md"

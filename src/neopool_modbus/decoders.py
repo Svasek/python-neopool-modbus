@@ -86,14 +86,14 @@ def build_timer_block(data: dict[str, Any]) -> list[int]:
     def safe_int(val: Any) -> int:
         try:
             return int(val)
-        except Exception:  # pragma: no cover
+        except (TypeError, ValueError):  # pragma: no cover
             return 0
 
     def split_u32(val: Any) -> list[int]:
         v = safe_int(val)
         return [v & 0xFFFF, (v >> 16) & 0xFFFF]
 
-    regs = [
+    return [
         safe_int(data.get("enable", 0)),
         *split_u32(data.get("on", 0)),
         *split_u32(data.get("off", 0)),
@@ -104,7 +104,6 @@ def build_timer_block(data: dict[str, Any]) -> list[int]:
         0,
         *split_u32(data.get("work_time", 0)),
     ]
-    return regs
 
 
 def hhmm_to_seconds(hhmm: str) -> int:
@@ -173,8 +172,8 @@ def get_filtration_speed(data: dict[str, Any]) -> int:
 
 def get_filtration_pump_type(par_filtration_conf: int) -> int:
     """Return the type of filtration pump based on configuration."""
-    pump_type = (par_filtration_conf & 0x000F) >> 0
-    return pump_type  # 0 = standard, 1/2 = variable speed
+    # 0 = standard, 1/2 = variable speed
+    return (par_filtration_conf & 0x000F) >> 0
 
 
 def pad_list(regs: list[int], length: int, pad_value: int = 0) -> list[int]:
