@@ -98,7 +98,7 @@ class NeoPoolModbusClient:
                 _framer_str,
             )
             self._framer = FramerType.SOCKET
-        self._client = None  # ← Persistent client instance
+        self._client: AsyncModbusTcpClient | None = None  # ← Persistent client instance
         self._client_lock = asyncio.Lock()
 
         # Connection retry parameters
@@ -106,21 +106,25 @@ class NeoPoolModbusClient:
         self._max_connection_retries = 3
         self._base_delay = 1.0
         self._max_delay = 30.0
-        self._backoff_until = None
+        self._backoff_until: datetime | None = None
 
         # Health tracking
         self._consecutive_errors = 0
-        self._last_successful_operation = None
+        self._last_successful_operation: datetime | None = None
         self._total_operations = 0
         self._successful_operations = 0
 
         # Diagnostic tracking
-        self._response_times = deque(maxlen=50)  # last 50 response times
-        self._failed_reads = {}  # address -> count
-        self._successful_addresses = deque(maxlen=20)  # last 20 successful addresses
-        self._write_response_times = deque(maxlen=50)
-        self._failed_writes = {}  # address -> count
-        self._successful_writes = deque(maxlen=20)  # (address, timestamp)
+        self._response_times: deque[float] = deque(maxlen=50)  # last 50 response times
+        self._failed_reads: dict[str, int] = {}  # address -> count
+        self._successful_addresses: deque[tuple[str, float]] = deque(
+            maxlen=20
+        )  # last 20 (address, timestamp) pairs
+        self._write_response_times: deque[float] = deque(maxlen=50)
+        self._failed_writes: dict[str, int] = {}  # address -> count
+        self._successful_writes: deque[tuple[str, float]] = deque(
+            maxlen=20
+        )  # (address, timestamp)
         self._total_writes = 0
         self._successful_write_ops = 0
 
@@ -377,11 +381,7 @@ class NeoPoolModbusClient:
         """Safely close the Modbus client connection."""
         if self._client is not None:
             try:
-                close_method = getattr(self._client, "close", None)
-                if callable(close_method):
-                    result = close_method()
-                    if result is not None and asyncio.iscoroutine(result):
-                        await asyncio.wait_for(result, timeout=5)
+                self._client.close()
                 _LOGGER.debug("Modbus client closed successfully")
             except Exception as e:  # noqa: BLE001  # pragma: no cover  # close is best-effort cleanup; never let any failure mask the original error
                 _LOGGER.debug("Error closing Modbus client: %s", e)
@@ -501,7 +501,7 @@ class NeoPoolModbusClient:
         return registers
 
     async def _perform_read_all(self) -> dict[str, Any]:
-        result = {}
+        result: dict[str, Any] = {}
 
         @overload
         def get_safe(regs: list[int], idx: int) -> int | None: ...
@@ -1269,12 +1269,12 @@ class NeoPoolModbusClient:
         and are always read fresh from the device.
         Returns a dictionary with timer names as keys and parsed timer data as values.
         """
-        timers = {}
+        timers: dict[str, Any] = {}
         start = time.monotonic()
         effective_timers = (
             set(enabled_timers) if enabled_timers is not None else set(TIMER_BLOCKS)
         )
-        force_read = set(force_read or ()) & effective_timers
+        forced_set = set(force_read or ()) & effective_timers
 
         # Skip timer reads if the INSTALLER page has not changed since the last poll,
         # this is not a forced full read, AND every requested timer is already
@@ -1288,7 +1288,7 @@ class NeoPoolModbusClient:
         if (
             can_use_cache
             and self._cached_timers
-            and not force_read
+            and not forced_set
             and effective_timers <= self._cached_timers.keys()
         ):
             _LOGGER.debug("Skipping timer read (no INSTALLER change notification)")
@@ -1308,7 +1308,7 @@ class NeoPoolModbusClient:
             if name not in effective_timers:
                 continue
             # Use cache for non-forced timers when INSTALLER page hasn't changed
-            if can_use_cache and name not in force_read and name in self._cached_timers:
+            if can_use_cache and name not in forced_set and name in self._cached_timers:
                 timers[name] = self._cached_timers[name]
                 continue
             try:

@@ -47,6 +47,7 @@ dev = [
     "pytest-cov>=5",
     "ruff>=0.7",
     "basedpyright>=1.20",
+    "mypy>=1.13",
 ]
 
 [project.urls]
@@ -117,6 +118,18 @@ ignore = [
 [tool.codespell]
 skip = "*.json,CHANGELOG.md"
 check-filenames = true
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src/neopool_modbus"]
+
+# pymodbus does not yet ship complete type stubs; silence the missing-import
+# noise scoped to that package only, so a future third-party dependency
+# without stubs will still surface as an error rather than be hidden.
+[[tool.mypy.overrides]]
+module = "pymodbus.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
