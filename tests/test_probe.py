@@ -26,15 +26,12 @@ from neopool_modbus.exceptions import (
 from neopool_modbus.probe import _resolve_framer
 
 
-def _make_client(connect_result=True, read_result=None, close_awaitable=False):
+def _make_client(connect_result=True, read_result=None):
     """Build a stub AsyncModbusTcpClient with the requested behavior."""
     fake = MagicMock()
     fake.connect = AsyncMock(return_value=connect_result)
     fake.read_holding_registers = AsyncMock(return_value=read_result)
-    if close_awaitable:
-        fake.close = AsyncMock()
-    else:
-        fake.close = MagicMock(return_value=None)
+    fake.close = MagicMock(return_value=None)
     return fake
 
 
@@ -177,19 +174,6 @@ async def test_async_probe_serial_invalid_framer():
     ):
         await async_probe_serial("192.0.2.10", framer="ascii")
     ctor.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_async_probe_serial_close_is_awaitable():
-    """If client.close() returns a coroutine it must be awaited."""
-    fake_client = _make_client(
-        connect_result=True,
-        read_result=_make_response([0x0001] * 6),
-        close_awaitable=True,
-    )
-    with patch("neopool_modbus.probe.AsyncModbusTcpClient", return_value=fake_client):
-        await async_probe_serial("192.0.2.10")
-    fake_client.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio

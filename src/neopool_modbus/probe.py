@@ -27,7 +27,6 @@ transport / protocol failure so callers do not need to import
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 
 from pymodbus.client import AsyncModbusTcpClient
@@ -150,9 +149,7 @@ async def async_probe_serial(
         return serial
     finally:
         try:
-            result: object = client.close()
-            if inspect.isawaitable(result):
-                await result
+            client.close()
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001  # cleanup path: never let close() failures mask the read result
