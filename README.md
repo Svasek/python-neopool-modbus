@@ -16,9 +16,23 @@
 [![Sponsor me](https://img.shields.io/badge/sponsor-❤-brightgreen?style=flat)](https://github.com/sponsors/svasek)
 [![Ko-fi](https://img.shields.io/badge/ko--fi-support-29abe0?style=flat&logo=ko-fi)](https://ko-fi.com/svasek)
 
-Async Python client for **Sugar Valley NeoPool** pool controllers (sold under
-brands VistaPool, Hidrolife, Aquascenic, Oxilife, Hayward, Brilix, Bayrol)
-connected via **Modbus TCP**.
+Async Python client for **NeoPool**-based pool controllers connected via
+**Modbus TCP**. NeoPool is a control system originally developed by the
+Spanish company **Sugar Valley** (acquired by **Hayward** in 2016), sold
+under many brand names and product lines worldwide.
+
+**Supported device models** (Sugar Valley / Hayward product lines):
+Hidrolife • Aquascenic • Oxilife • Bionet • Hidroniser • UVScenic •
+Station • Aquarite
+
+**Distributed by** (vendors selling NeoPool-based hardware):
+Hayward • Brilix (Albixon) • Bayrol • Certikin • Poolstar • GrupAquadirect •
+Pentair • ProducPool • Pool Technologie • Kripsol
+
+> **Note:** _VistaPool_ is the name of Hayward's mobile/web app for
+> cloud-based pool management. This library communicates **locally via
+> Modbus TCP** — it does not require or use the VistaPool app or any
+> cloud service.
 
 This library is the communication layer extracted from the
 [Home Assistant `neopool` integration](https://github.com/svasek/homeassistant-neopool-modbus)
@@ -47,8 +61,8 @@ async def main() -> None:
     )
     try:
         data = await client.async_read_all()
-        # Keys are the upstream Sugar Valley register names from
-        # https://github.com/arendst/Tasmota/.../xsns_83_neopool.ino,
+        # Keys are the NeoPool register names defined by Sugar Valley
+        # (mirrored from Tasmota's xsns_83_neopool.ino driver);
         # values are decoded into native Python types.
         print(f"pH:          {data['MBF_MEASURE_PH']}")           # e.g. 7.42
         print(f"Temperature: {data['MBF_MEASURE_TEMPERATURE']} °C")  # e.g. 27.3
@@ -169,6 +183,8 @@ This library is provided "AS IS" and without any warranty or guarantee of any ki
 The author takes no responsibility for any damage, loss, or malfunction resulting from the use or misuse of this code. Use at your own risk.
 
 _This project is not affiliated with or endorsed by Sugar Valley, Hayward, or any other pool equipment manufacturer or distributor._
+
+_"VistaPool" is a trademark of Hayward Industries, Inc. This library communicates locally via Modbus and does not use the VistaPool cloud service._
 
 ## License
 
