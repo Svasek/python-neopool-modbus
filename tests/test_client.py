@@ -898,10 +898,14 @@ async def test_perform_write_register_mismatch_warning(config, monkeypatch, capl
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "register_name",
+    ["EEPROM_SAVE_REGISTER", "EXEC_REGISTER", "COPY_TO_RTC_REGISTER"],
+)
 async def test_perform_write_command_register_no_mismatch_warning(
-    config, monkeypatch, caplog
+    config, monkeypatch, caplog, register_name
 ):
-    """Command registers (e.g. EXEC) auto-clear; no mismatch warning expected."""
+    """Command registers (e.g. EXEC, EEPROM_SAVE, COPY_TO_RTC) auto-clear; no mismatch warning expected."""
     client = neopool_modbus.NeoPoolModbusClient(config)
     fake_modbus = AsyncMock()
     fake_modbus.connected = True
@@ -918,10 +922,12 @@ async def test_perform_write_command_register_no_mismatch_warning(
 
     import logging
 
-    from neopool_modbus.registers import EXEC_REGISTER
+    from neopool_modbus import registers as registers_mod
+
+    address = getattr(registers_mod, register_name)
 
     with caplog.at_level(logging.WARNING):
-        result = await client._perform_write_register(EXEC_REGISTER, 1)
+        result = await client._perform_write_register(address, 1)
     assert result is not None
     assert "Write verification mismatch" not in caplog.text
 
