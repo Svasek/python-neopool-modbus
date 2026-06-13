@@ -1,22 +1,8 @@
-# NeoPool / Vistapool Control System — MODBUS Register Description
+# NeoPool Control System - MODBUS Register Description
 
-> **Merged reference combining two upstream documents:**
->
-> - **2015 NeoPool docs** — Sugar Valley, Juan Ramón Vadillo (March 23rd, 2015) — archived at [`docs/modbus-registers-v2015.md`](modbus-registers-v2015.md)
-> - **2023 Vistapool docs v10.23** — Hayward technical department (October 13th, 2023) — archived at [`docs/modbus-registers-v2023.md`](modbus-registers-v2023.md)
->
-> Where both sources document the same address, the **2015 text is canonical** and the v10.23 wording is referenced via callouts. Registers introduced in v10.23 are marked _Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
->
-> Two addresses (`0x0403` and `0x0430`) are documented under different names and meanings in the two sources — those entries carry an explicit **Note (v10.23 firmware)** callout pointing at the alternate definition.
-
----
-
-## Sources
-
-| Year | Maker                    | Filename                                                                   | Notes                                                  |
-| ---- | ------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------ |
-| 2015 | Sugar Valley / NeoPool   | [`docs/modbus-registers-v2015.md`](modbus-registers-v2015.md)              | Canonical text for shared registers                    |
-| 2023 | Hayward / Vistapool v10.23 | [`docs/modbus-registers-v2023.md`](modbus-registers-v2023.md) | New registers; conflict callouts at `0x0403` / `0x0430` |
+**Author:** Juan Ramón Vadillo  
+**Date:** March 23rd, 2015  
+**Manufacturer:** Sugar Valley
 
 ---
 
@@ -24,25 +10,24 @@
 
 1. [Introduction](#1-introduction)
 2. [Register Description](#2-register-description)
-   - 2.1 [Modbus Page (MODBUS)](#21-modbus-page-modbus)
-   - 2.2 [Measures Page (MEASURE)](#22-measures-page-measure)
-   - 2.3 [Global Page (GLOBAL)](#23-global-page-global)
+   - 2.1 [Measures Page (MEASURE)](#21-measures-page-measure)
+   - 2.2 [Global Page (GLOBAL)](#22-global-page-global)
+   - 2.3 [Installer Page (INSTALLER)](#23-installer-page-installer)
    - 2.4 [Factory Page (FACTORY)](#24-factory-page-factory)
-   - 2.5 [Installer Page (INSTALLER)](#25-installer-page-installer)
-   - 2.6 [User Page (USER)](#26-user-page-user)
-   - 2.7 [Miscellaneous Page (MISC)](#27-miscellaneous-page-misc)
+   - 2.5 [User Page (USER)](#25-user-page-user)
+   - 2.6 [Miscellaneous Page (MISC)](#26-miscellaneous-page-misc)
 
 ---
 
 ## 1 Introduction
 
-The NeoPool / Vistapool Control System is equipped with RS485 communication ports using a MODBUS protocol that allows a remote controller to adjust the different working parameters of the device. The 2015 spec mentions two such ports; the 2023 v10.23 spec lists three.
+The NeoPool Control System is equipped with two RS485 communication ports with a MODBUS protocol that allows a remote controller to adjust the different working parameters of the device.
 
 The first port, labelled on the board as **"DISPLAY"**, is usually connected to the Screen Controller, which is itself a MODBUS master. The other port, labelled as **"RF/WIFI"**, is available for external communications.
 
-A semaphore system has been implemented between all ports in order to manage register change requests happening simultaneously in both ports. However, the remote masters can always read any register concurrently.
+A semaphore system has been implemented between both ports in order to manage register change requests happening simultaneously in both ports. However, the remote masters can always read any register concurrently.
 
-The slave has the **MODBUS address 1** as default communication address, but it can be changed with a reserved procedure (see [`MBF_NODE_ADDR`](#register-0x0000---mbf_node_addr)).
+The slave has the **MODBUS address 1** as default communication address, but it can be changed with a reserved procedure.
 
 **Communication parameters for the RS485 asynchronous serial port:**
 
@@ -66,29 +51,15 @@ The register set is divided into 7 different pages:
 | 0x0100           | MEASURE   | Contains the different measurement information including hydrolysis current, pH level, redox level, etc.                                                                      |
 | 0x0200           | GLOBAL    | Contains global information, such as the amount of time that each power unit has been working.                                                                                |
 | 0x0300           | FACTORY   | Contains factory data such as calibration parameters for the different power units.                                                                                           |
-| 0x0400           | INSTALLER | Contains a set of configuration registers related to the box installation, such as the relays used for each function, the amount of time that each pump must operate, etc.   |
+| 0x0400           | INSTALLER | Contains a set of configuration registers related to the box installation, such as the relays used for each function, the amount of time that each pump must operate, etc.    |
 | 0x0500           | USER      | Contains user configuration registers, such as the production level for the ionization and the hydrolysis, or the set points for the pH, redox, or chlorine regulation loops. |
 | 0x0600           | MISC      | Contains the configuration parameters for the screen controllers (language, colours, sound, etc.).                                                                            |
 
-Any modifications done over the registers should be made persistent by requesting an EEPROM storage. See [`MBF_SAVE_TO_EEPROM`](#register-0x02f0---mbf_save_to_eeprom) for more information.
+Any modifications done over the registers should be made persistent by requesting an EEPROM storage. See [`MBF_SAVE_TO_EEPROM`](#register-0x02f0--mbf_save_to_eeprom) for more information.
 
 ---
 
-## 2.1 Modbus Page (MODBUS)
-
-### Register 0x0000 - `MBF_NODE_ADDR`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-This register contains the current MODBUS slave address. Writing to this register changes the MODBUS address of the node.
-
-The value of this register must be in the range of 1 to 240, both inclusive. Address 0 is reserved for sending broadcast messages to all devices.
-
-When a write to this register occurs, the system must complete the write transaction by sending the response message, and only after that perform the change of the MODBUS address.
-
----
-
-## 2.2 Measures Page (MEASURE)
+## 2.1 Measures Page (MEASURE)
 
 ### Register 0x0100 - `MBF_ION_CURRENT`
 
@@ -324,29 +295,8 @@ It is the responsibility of the MODBUS master to clear this register to 0 once t
 Voltage applied to the hydrolysis cell. Together with `MBF_HIDRO_CURRENT` (0x0101), this register allows extrapolation of the water salinity.
 
 ---
----
 
-## 2.3 Global Page (GLOBAL)
-
-### Registers 0x0206-0x0207 - `MBF_PAR_HIDRO_WORK_TIME_LOW` and `MBF_PAR_HIDRO_WORK_TIME_HIGH`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-This set of two registers contains the number of seconds that the chlorination cell has been working since the device was manufactured. The two registers must be read consecutively to build a 32-bit unsigned integer with the time.
-
-This counter must not be erased as it is used to estimate the lifetime of the device.
-
----
-
-### Registers 0x0208-0x0209 - `MBF_PAR_PARTIAL_HIDRO_WORK_TIME_LOW` and `MBF_PAR_PARTIAL_HIDRO_WORK_TIME_HIGH`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-This set of two registers contains the number of seconds that the chlorination cell has been working since the counter was reset (partial counter). The two registers must be read consecutively to build a 32-bit unsigned integer with the time.
-
-This counter is reset each time the cell is changed by the installer and it is used to estimate the total working time of a cell.
-
----
+## 2.2 Global Page (GLOBAL)
 
 ### Register 0x02F0 - `MBF_SAVE_TO_EEPROM`
 
@@ -358,172 +308,7 @@ EEPROM write operations occur automatically every 10 minutes. However, after mod
 
 ---
 
-### Register 0x02F1 - `MBF_CLEAR_EEPROM`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-A write operation to this register (with any value) restores the register memory to its factory default state immediately. This operation does **not** store the values into non-volatile EEPROM memory. To store the contents of the factory default state, a `MBF_SAVE_TO_EEPROM` operation has to be executed.
-
----
-
-### Register 0x02F2 - `MBF_RESET_USER_COUNTERS`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-A write operation to this register (with any value) resets the user time counters:
-
-- `MBF_PAR_PARTIAL_HIDRO_WORK_TIME`
-- `MBF_PAR_PARTIAL_ION_WORK_TIME`
-- `MBF_PAR_PARTIAL_UV_WORK_TIME`
-
-These counters are associated with the user-level access.
-
-This operation does **not** store the values into non-volatile EEPROM memory. To store the contents of the factory default state, a `MBF_SAVE_TO_EEPROM` operation has to be executed.
-
----
-
-### Register 0x02F4 - `MBF_STOP_ALL_MODULES`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-A write operation to this register (with any value) stops the operation of all modules. The following operational functions are affected:
-
-- Hydrolysis / Chlorination
-- Ionization
-- pH, ORP, Conductivity and chlorine control
-- Ultraviolet water depuration
-- Filtration pump control
-- All auxiliary relays
-
-The operation of all those functions can be relaunched by means of the `MBF_RESTART_MODULES` register.
-
----
-
-### Register 0x02F5 - `MBF_RESTART_MODULES`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-A write operation to this register (with any value) restarts the operation of all function modules of the device. The following operational functions are affected:
-
-- Hydrolysis / Chlorination
-- Ionization
-- pH, ORP, Conductivity and chlorine control
-- Ultraviolet water depuration
-- Filtration pump control
-- All auxiliary relays
-
-It is recommended to relaunch all modules if a parameter change has taken place, like filtration scheduler programming, filtration mode, etc.
-
----
-
-## 2.4 Factory Page (FACTORY)
-
-> **Warning:** The factory registers marked as "DO NOT MODIFY" must not be changed. Uncontrolled modification of these registers could lead to bad operation of the system, and in some cases to an unrecoverable failure requiring technical assistance.
-
----
-
-### Register 0x0300 - `MBF_PAR_VERSION`
-
-PowerBox software version. Not used.
-
----
-
-### Register 0x0301 - `MBF_PAR_MODEL`
-
-Equipment model options bitmask. **DO NOT MODIFY.**
-
-| Bit | Mask   | Name                   | Description                                                 |
-| --- | ------ | ---------------------- | ----------------------------------------------------------- |
-| 0   | 0x0001 | `MBMSK_MODEL_ION`      | Device includes copper-silver ionization control            |
-| 1   | 0x0002 | `MBMSK_MODEL_HIDRO`    | Device includes hydrolysis or electrolysis                  |
-| 2   | 0x0004 | `MBMSK_MODEL_UV`       | Device includes UV lamp disinfection control                |
-| 3   | 0x0008 | `MBMSK_MODEL_SALINITY` | Device includes salinity measurement (Fanless devices only) |
-
----
-
-### Register 0x0302 - `MBF_PAR_SERNUM`
-
-Equipment serial number. Not used.
-
----
-
-### Register 0x0303 - `MBF_PAR_ION_NOM`
-
-Maximum ionization production level. **DO NOT MODIFY.**
-
----
-
-### Register 0x0306-0x0307 - `MBF_PAR_HIDRO_NOM`
-
-Maximum hydrolysis/electrolysis production level. If the hydrolysis module operates in percent mode, this value is 100. If operating in g/h mode, this value contains the maximum production in g/h units. **DO NOT MODIFY.**
-
----
-
-### Register 0x030A - `MBF_PAR_SAL_AMPS`
-
-Current setpoint (in regulation) at which voltage is measured for salinity calculation.
-
----
-
-### Register 0x030B - `MBF_PAR_SAL_CELLK`
-
-Cell constant: the relationship between the measured resistance in the measurement process and its equivalence in g/l (grams per liter).
-
-Salinity formula:
-$$\text{Salinity}_{23°C} = \frac{R_{CELL}}{K_{CELL}} \cdot \frac{1}{1 + T_{COMP} \cdot (T - 23°C)}$$
-
----
-
-### Register 0x030C - `MBF_PAR_SAL_TCOMP`
-
-Temperature deviation coefficient of conductivity for salinity calculation.
-
----
-
-### Register 0x0322 - `MBF_PAR_HIDRO_MAX_VOLTAGE` _(Fanless devices only)_
-
-Maximum voltage in tenths of a volt that can be reached by the hydrolysis current regulation. Default: 80 (= 8.0 V maximum cell operating voltage).
-
-> To make changes persistent, execute the EEPROM storage procedure described in `MBF_SAVE_TO_EEPROM`.
-
----
-
-### Register 0x0323 - `MBF_PAR_HIDRO_FLOW_SIGNAL` _(Fanless devices only)_
-
-Flow detection signal configuration for hydrolysis operation:
-
-| Value | Name                                       | Description                                                                                                                        |
-| ----- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 0     | `MBV_PAR_HIDRO_FLOW_SIGNAL_STD`            | Standard detection based on conduction between an auxiliary electrode and either cell electrode                                    |
-| 1     | `MBV_PAR_HIDRO_FLOW_SIGNAL_ALWAYS_ON`      | Always connected - forces hydrolysis current generation even without flow detected                                                 |
-| 2     | `MBV_PAR_HIDRO_FLOW_SIGNAL_PADDLE`         | Detection based on paddle switch connected to FL1 input                                                                            |
-| 3     | `MBV_PAR_HIDRO_FLOW_SIGNAL_PADDLE_AND_STD` | Both paddle switch (FL1) AND standard detection; flow is detected when BOTH detect flow; hydrolysis stops if either opens          |
-| 4     | `MBV_PAR_HIDRO_FLOW_SIGNAL_PADDLE_OR_STD`  | Paddle switch (FL1) OR standard detection; flow is detected when EITHER detects flow; hydrolysis stops only if BOTH detect no flow |
-
-Default: 0 (standard detection).
-
-> To make changes persistent, execute the EEPROM storage procedure described in `MBF_SAVE_TO_EEPROM`.
-
----
-
-### Register 0x0324 - `MBF_PAR_HIDRO_MAX_PWM_STEP_UP` _(Fanless devices only)_
-
-PWM ramp-up rate in pulses per work cycle for hydrolysis. Controls the rate at which power delivered to the cell increases, enabling a gradual power ramp-up so as not to saturate the switching power supply. Default: 150.
-
-> To make changes persistent, execute the EEPROM storage procedure described in `MBF_SAVE_TO_EEPROM`.
-
----
-
-### Register 0x0325 - `MBF_PAR_HIDRO_MAX_PWM_STEP_DOWN` _(Fanless devices only)_
-
-PWM ramp-down rate in pulses per work cycle for hydrolysis. Controls the rate at which power delivered to the cell decreases gradually, preventing the switching power supply from disconnecting due to lack of load. The ramp-down rate must match the type of cell used, as the cell stores charge after the current stimulus ceases. Default: 20.
-
-> To make changes persistent, execute the EEPROM storage procedure described in `MBF_SAVE_TO_EEPROM`.
-
----
----
-
-## 2.5 Installer Page (INSTALLER)
+## 2.3 Installer Page (INSTALLER)
 
 ### Register 0x0400 - `MBF_PAR_ION_POL0`
 
@@ -564,8 +349,6 @@ Bitmask controlling external control of ionization, hydrolysis, and pumps. Activ
 | 7   | 0x0080 | `INVERSION`          | Determines whether "active" means open or closed for input signals; allows inverting behavior (e.g., a paddle that closes when there is no flow) |
 
 > To make changes persistent, execute the EEPROM storage procedure described in `MBF_SAVE_TO_EEPROM`.
-
-> **Note (v10.23 firmware):** the same address `0x0403` is documented in the 2023 Hayward Vistapool spec under a different name — **`MBF_PAR_EXT_CTRL`** — but with the same bit-field semantics (`FL1_CTRL` / `FL2_CTRL` / `FULL_CL_HIDRO_CTRL` / `SLAVE` / `PADDLE_SWITCH` / `PADDLE_SWITCH_INV` / `INVERSION`). Only the symbolic name differs; the actual register layout and meaning match the 2015 `MBF_PAR_HIDRO_ION_CAUDAL` description above. See [`docs/modbus-registers-v2023.md`](modbus-registers-v2023.md) for the v10.23 wording.
 
 ---
 
@@ -935,17 +718,6 @@ pH regulation configuration:
 | 1     | `MBV_PAR_RELAY_PH_ACID_ONLY`     | Device works with acid pump only           |
 | 2     | `MBV_PAR_RELAY_PH_BASE_ONLY`     | Device works with base pump only           |
 
-> **Note (v10.23 firmware):** the same address `0x0430` is documented in the 2023 Hayward Vistapool spec under a different name and a substantially extended meaning — **`MBF_PAR_SETPOINT_MODE`**. In v10.23 this register encodes the regulation mode for **all four** measurement modules (pH, Redox/ORP, chlorine, conductivity) as a four-field bit-mask:
->
-> | Bits | Mask   | Identifier                    | Module        |
-> | ---- | ------ | ----------------------------- | ------------- |
-> | 0-2  | 0x0007 | `MBMSK_PAR_SETPOINT_MODE_PH`  | pH            |
-> | 3-5  | 0x0038 | `MBMSK_PAR_SETPOINT_MODE_RX`  | Redox / ORP   |
-> | 6-8  | 0x01C0 | `MBMSK_PAR_SETPOINT_MODE_CL`  | Chlorine      |
-> | 9-11 | 0x0E00 | `MBMSK_PAR_SETPOINT_MODE_CD`  | Conductivity  |
->
-> The 2015 `MBV_PAR_RELAY_PH_ACID_AND_BASE` (0), `…_ACID_ONLY` (1) and `…_BASE_ONLY` (2) values still match the lower three bits in v10.23, but v10.23 adds three further pH modes (`MBV_PAR_SETPOINT_MODE_PH_ACID_BASE_SINGLE_REL` = 3, `…_HYST_NEG` = 4, `…_HYST_POS` = 5) plus analogous mode tables for RX, CL, and CD. See [`docs/modbus-registers-v2023.md`](modbus-registers-v2023.md) for the full enumeration.
-
 ---
 
 ### Register 0x0431 - `MBF_PAR_RELAY_MAX_TIME`
@@ -1113,9 +885,114 @@ When a cleaning action starts, the value of `MBF_PAR_FILTVALVE_INTERVAL` is copi
 Special function register - use with extreme care. Writing to this register forces the values of `MBF_PAR_TIME_LOW` (0x0408) and `MBF_PAR_TIME_HIGH` (0x0409) to be written into the internal RTC microcontroller clock management registers.
 
 ---
+
+## 2.4 Factory Page (FACTORY)
+
+> **Warning:** The factory registers marked as "DO NOT MODIFY" must not be changed. Uncontrolled modification of these registers could lead to bad operation of the system, and in some cases to an unrecoverable failure requiring technical assistance.
+
 ---
 
-## 2.6 User Page (USER)
+### Register 0x0300 - `MBF_PAR_VERSION`
+
+PowerBox software version. Not used.
+
+---
+
+### Register 0x0301 - `MBF_PAR_MODEL`
+
+Equipment model options bitmask. **DO NOT MODIFY.**
+
+| Bit | Mask   | Name                   | Description                                                 |
+| --- | ------ | ---------------------- | ----------------------------------------------------------- |
+| 0   | 0x0001 | `MBMSK_MODEL_ION`      | Device includes copper-silver ionization control            |
+| 1   | 0x0002 | `MBMSK_MODEL_HIDRO`    | Device includes hydrolysis or electrolysis                  |
+| 2   | 0x0004 | `MBMSK_MODEL_UV`       | Device includes UV lamp disinfection control                |
+| 3   | 0x0008 | `MBMSK_MODEL_SALINITY` | Device includes salinity measurement (Fanless devices only) |
+
+---
+
+### Register 0x0302 - `MBF_PAR_SERNUM`
+
+Equipment serial number. Not used.
+
+---
+
+### Register 0x0303 - `MBF_PAR_ION_NOM`
+
+Maximum ionization production level. **DO NOT MODIFY.**
+
+---
+
+### Register 0x0306-0x0307 - `MBF_PAR_HIDRO_NOM`
+
+Maximum hydrolysis/electrolysis production level. If the hydrolysis module operates in percent mode, this value is 100. If operating in g/h mode, this value contains the maximum production in g/h units. **DO NOT MODIFY.**
+
+---
+
+### Register 0x030A - `MBF_PAR_SAL_AMPS`
+
+Current setpoint (in regulation) at which voltage is measured for salinity calculation.
+
+---
+
+### Register 0x030B - `MBF_PAR_SAL_CELLK`
+
+Cell constant: the relationship between the measured resistance in the measurement process and its equivalence in g/l (grams per liter).
+
+Salinity formula:
+$$\text{Salinity}_{23°C} = \frac{R_{CELL}}{K_{CELL}} \cdot \frac{1}{1 + T_{COMP} \cdot (T - 23°C)}$$
+
+---
+
+### Register 0x030C - `MBF_PAR_SAL_TCOMP`
+
+Temperature deviation coefficient of conductivity for salinity calculation.
+
+---
+
+### Register 0x0322 - `MBF_PAR_HIDRO_MAX_VOLTAGE` _(Fanless devices only)_
+
+Maximum voltage in tenths of a volt that can be reached by the hydrolysis current regulation. Default: 80 (= 8.0 V maximum cell operating voltage).
+
+> To make changes persistent, execute the EEPROM storage procedure described in `MBF_SAVE_TO_EEPROM`.
+
+---
+
+### Register 0x0323 - `MBF_PAR_HIDRO_FLOW_SIGNAL` _(Fanless devices only)_
+
+Flow detection signal configuration for hydrolysis operation:
+
+| Value | Name                                       | Description                                                                                                                        |
+| ----- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | `MBV_PAR_HIDRO_FLOW_SIGNAL_STD`            | Standard detection based on conduction between an auxiliary electrode and either cell electrode                                    |
+| 1     | `MBV_PAR_HIDRO_FLOW_SIGNAL_ALWAYS_ON`      | Always connected - forces hydrolysis current generation even without flow detected                                                 |
+| 2     | `MBV_PAR_HIDRO_FLOW_SIGNAL_PADDLE`         | Detection based on paddle switch connected to FL1 input                                                                            |
+| 3     | `MBV_PAR_HIDRO_FLOW_SIGNAL_PADDLE_AND_STD` | Both paddle switch (FL1) AND standard detection; flow is detected when BOTH detect flow; hydrolysis stops if either opens          |
+| 4     | `MBV_PAR_HIDRO_FLOW_SIGNAL_PADDLE_OR_STD`  | Paddle switch (FL1) OR standard detection; flow is detected when EITHER detects flow; hydrolysis stops only if BOTH detect no flow |
+
+Default: 0 (standard detection).
+
+> To make changes persistent, execute the EEPROM storage procedure described in `MBF_SAVE_TO_EEPROM`.
+
+---
+
+### Register 0x0324 - `MBF_PAR_HIDRO_MAX_PWM_STEP_UP` _(Fanless devices only)_
+
+PWM ramp-up rate in pulses per work cycle for hydrolysis. Controls the rate at which power delivered to the cell increases, enabling a gradual power ramp-up so as not to saturate the switching power supply. Default: 150.
+
+> To make changes persistent, execute the EEPROM storage procedure described in `MBF_SAVE_TO_EEPROM`.
+
+---
+
+### Register 0x0325 - `MBF_PAR_HIDRO_MAX_PWM_STEP_DOWN` _(Fanless devices only)_
+
+PWM ramp-down rate in pulses per work cycle for hydrolysis. Controls the rate at which power delivered to the cell decreases gradually, preventing the switching power supply from disconnecting due to lack of load. The ramp-down rate must match the type of cell used, as the cell stores charge after the current stimulus ceases. Default: 20.
+
+> To make changes persistent, execute the EEPROM storage procedure described in `MBF_SAVE_TO_EEPROM`.
+
+---
+
+## 2.5 User Page (USER)
 
 > All user page registers should be made persistent using `MBF_SAVE_TO_EEPROM` after modification.
 
@@ -1157,19 +1034,6 @@ This register must always be lower than `MBF_PAR_PH1`.
 
 ---
 
-### Register 0x0506 - `MBF_PAR_HIDRO_CTRL_MODULE`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-This function determines which measurement module controls the hydrolysis generation.
-
-| Value | Description                                                |
-| ----- | ---------------------------------------------------------- |
-| 0     | Hydrolysis generation is controlled by the ORP (RX) module |
-| 1     | Hydrolysis generation is controlled by the chlorine (CL) module |
-
----
-
 ### Register 0x0508 - `MBF_PAR_RX1`
 
 Redox/ORP regulation setpoint. Value must be in the range 0 to 1000.
@@ -1179,68 +1043,6 @@ Redox/ORP regulation setpoint. Value must be in the range 0 to 1000.
 ### Register 0x050A - `MBF_PAR_CL1`
 
 Chlorine regulation setpoint, multiplied by 100. Example: to set 1.5 ppm, write 150. Value range: 0 to 1000.
-
----
-
-### Register 0x050E - `MBF_PAR_CD1`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-Lower set-point value for the conductivity module. Value is written in microsiemens. When the system is configured as dual set-point mode, this field contains the lower set point.
-
----
-
-### Register 0x050F - `MBF_PUMP_CONFIG`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-This register holds the configuration of the filtration pump. The register is divided into 5 different bit fields:
-
-| Bits  | Mask   | Description                                                                            |
-| ----- | ------ | -------------------------------------------------------------------------------------- |
-| 0-3   | 0x000F | Pump type. `0` = STANDARD, `1` = VARIABLE SPEED Type A, `2` = VARIABLE SPEED Type B    |
-| 4-6   | 0x0070 | Pump speed in manual mode: `0` = Slow, `1` = Medium, `2` = Fast                        |
-| 7-9   | 0x0380 | Pump speed in filtration interval 1: `0` = Slow, `1` = Medium, `2` = Fast              |
-| 10-12 | 0x1C00 | Pump speed in filtration interval 2: `0` = Slow, `1` = Medium, `2` = Fast              |
-| 13-15 | 0xE000 | Pump speed in filtration interval 3: `0` = Slow, `1` = Medium, `2` = Fast              |
-
-**Example:** value `0x0402` decodes as:
-
-- Pump type: 2 — Variable speed Type B
-- Manual mode: 0 — Slow
-- Filtration interval 1: 0 — Slow
-- Filtration interval 2: 1 — Medium
-- Filtration interval 3: 0 — Slow
-
----
-
-### Register 0x0511 - `MBF_PAR_RX2`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-Upper set-point for the redox regulation system. Used when the system is configured as dual set-point mode. Value range: 0 to 1000.
-
----
-
-### Register 0x0512 - `MBF_PAR_CL2`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-Upper set-point for the chlorine regulation system. Used when the system is configured as dual set-point mode. The value stored is multiplied by 100 (e.g. write 150 to set 1.5 ppm). Value range: 0 to 1000.
-
----
-
-### Register 0x0513 - `MBF_PAR_PUMP_SPEEDS`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-Pump speeds for specific actions when a variable-speed pump is configured.
-
-| Bits | Mask   | Description                                                                                          |
-| ---- | ------ | ---------------------------------------------------------------------------------------------------- |
-| 0-3  | 0x000F | Speed used when operating the filtration valve: `0` = Slow, `1` = Medium, `2` = Fast, `3` = do not override |
-| 4-7  | 0x00F0 | Speed used when operating cover protection: `0` = Slow, `1` = Medium, `2` = Fast, `3` = do not override |
-| 8-11 | 0x0F00 | Speed used when operating the filtration valve: `0` = Slow, `1` = Medium, `2` = Fast                 |
 
 ---
 
@@ -1262,37 +1064,7 @@ Heating dependency bit values:
 
 ---
 
-### Register 0x051D - `MBF_PAR_PUMP_SCALING`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-This register stores the pump scaling for the pH dosing pump and the other dosing pumps. The register is split in two fields, the lower one for the pH dosing timing and the upper for the rest of the pumps.
-
-| Bits | Mask   | Description                                                                                |
-| ---- | ------ | ------------------------------------------------------------------------------------------ |
-| 0-7  | 0x00FF | Pump scaling for the pH pump. Valid range: 0 (= 0 %) to 100 (= 100 %)                      |
-| 8-15 | 0xFF00 | Pump scaling for the other pumps. Valid range: 0 (= 0 %) to 100 (= 100 %)                  |
-
-Scaling changes the pump-on time according to the difference between the set point and the currently measured parameter. The maximum scaling differences for each measurement module:
-
-| Module             | Difference        |
-| ------------------ | ----------------- |
-| pH                 | 1.0               |
-| Redox (ORP)        | 100 mV            |
-| Chlorine (Cl)      | 50 ppm            |
-| Conductivity (Cd)  | 500 microsiemens  |
-
----
-
-### Register 0x051E - `MBF_PAR_CD2`
-
-_Documented in 2023 v10.23 (Hayward / Vistapool); not present in 2015 NeoPool spec._
-
-Upper set-point value for the conductivity module. Value is written in microsiemens. When the system is configured as dual set-point mode, this field contains the upper set point.
-
----
-
-## 2.7 Miscellaneous Page (MISC)
+## 2.6 Miscellaneous Page (MISC)
 
 This page contains registers associated with the display configuration and its visualization options.
 
